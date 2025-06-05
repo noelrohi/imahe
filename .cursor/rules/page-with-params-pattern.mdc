@@ -1,0 +1,100 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Pattern: Page with Route Params and Search Params (`nuqs`)
+
+This rule describes the standard pattern in this project for creating Next.js App Router pages that handle both dynamic route parameters (e.g., `[id]`) and URL search parameters, specifically utilizing the `nuqs/server` library for robust search parameter parsing and management.
+
+Use this pattern when a page's behavior or content needs to be determined by both the main URL path segment and query string parameters.
+
+## Structure
+
+For a route like `/feature/[dynamicParam]`, the typical file structure would be:
+
+```
+src/app/
+└── feature/
+    └── [dynamicParam]/
+        ├── page.tsx           # Server Component (Entry Point)
+        ├── search-params.ts   # nuqs search parameter definitions
+        └── page.client.tsx    # (Optional) Client Component for interactivity
+```
+
+## Implementation Steps
+
+1.  **Define Search Parameters (`search-params.ts`):**
+    *   Create a `search-params.ts` file next to your `page.tsx`.
+    *   Import `createLoader` and necessary parsers (e.g., `parseAsString`, `parseAsInteger`) from `nuqs/server`.
+    *   Define an object mapping search parameter keys to their respective parsers.
+    *   Export a `loadSearchParams` function created using `createLoader` with your definitions object.
+    *   *(Optional)* Export the inferred type for better type safety.
+    *   **Example:** [collector/search-params.ts](mdc:src/app/spaces/[spaceId]/collector/search-params.ts)
+    *   **Example:** [wall/search-params.ts](mdc:src/app/spaces/[spaceId]/wall/search-params.ts)
+
+    ```typescript
+    // Example: src/app/feature/[dynamicParam]/search-params.ts
+    import { createLoader, parseAsString, parseAsInteger, type inferParserType } from "nuqs/server";
+
+    export const featureSearchParams = {
+      filter: parseAsString.withDefault('all'),
+      sortBy: parseAsString,
+      page: parseAsInteger.withDefault(1),
+    };
+
+    export type FeatureSearchParams = inferParserType<typeof featureSearchParams>;
+
+    export const loadSearchParams = createLoader(featureSearchParams);
+    ```
+
+2.  **Implement Page Component (`page.tsx`):**
+    *   Create an `async` server component `page.tsx`.
+    *   Define the component props to accept `params` (for route parameters) and `searchParams`.
+    *   Import the `loadSearchParams` function from your `search-params.ts` file.
+    *   Inside the component, await the `params` promise to get the route parameters (e.g., `dynamicParam`).
+    *   Await `loadSearchParams(searchParams)` to get the parsed and typed search parameters.
+    *   Use the extracted `params` and parsed search parameters for data fetching (e.g., using `api` helpers and potentially `prefetch`), logic, and passing data down to client components.
+    *   **Example:** [collector/page.tsx](mdc:src/app/spaces/[spaceId]/collector/page.tsx)
+    *   **Example:** [(protected)/[spaceId]/page.tsx](mdc:src/app/(protected)/[spaceId]/page.tsx) (Handles `params` but not `searchParams` via `nuqs`, shows `params` usage).
+
+    ```typescript
+    // Example: src/app/feature/[dynamicParam]/page.tsx
+    import type { SearchParams } from "nuqs/server";
+    import { loadSearchParams } from "./search-params";
+    import { api } from "@/trpc/server";
+    // import { FeatureClientPage } from "./page.client"; // If using client component
+
+    type PageProps = {
+      params: Promise<{ dynamicParam: string }>;
+      searchParams: Promise<SearchParams>;
+    };
+
+    export default async function FeaturePage({ params, searchParams }: PageProps) {
+      const { dynamicParam } = await params;
+      const parsedSearchParams = await loadSearchParams(searchParams);
+
+      // Example: Prefetch data based on params and searchParams
+      await api.feature.getData.prefetch({ 
+        id: dynamicParam, 
+        filter: parsedSearchParams.filter 
+      });
+
+      // Pass necessary data to client component or render directly
+      return (
+        <div>
+          <h1>Feature: {dynamicParam}</h1>
+          <p>Filter: {parsedSearchParams.filter}</p>
+          <p>Sort By: {parsedSearchParams.sortBy ?? 'default'}</p>
+          {/* <FeatureClientPage id={dynamicParam} initialSearchParams={parsedSearchParams} /> */}
+        </div>
+      );
+    }
+    ```
+
+3.  **(Optional) Client Component (`page.client.tsx`):**
+    *   If interactivity is needed, create a `page.client.tsx` file with the `"use client";` directive.
+    *   Accept necessary data (fetched in the server component) and potentially the parsed search params as props.
+    *   Use client-side hooks (`useSearchParams` from `nuqs` if needed for updates) for interaction.
+
+This pattern standardizes handling complex page inputs derived from both the route path and query string, leveraging `nuqs` for type safety and cleaner parsing logic.

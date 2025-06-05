@@ -1,0 +1,49 @@
+---
+description: 
+globs: src/**/*.ts,src/**/*.tsx
+alwaysApply: false
+---
+# File Naming Conventions
+
+This document outlines the conventions for naming files and directories within the `[src](mdc:src)` directory. Adhering to these conventions ensures consistency and predictability across the codebase.
+
+## General Rules
+
+-   **Case:** Use **kebab-case** for non-component files and directories (e.g., `[use-trpc.ts](mdc:src/hooks/use-trpc.ts)`, `[utils](mdc:src/lib/utils.ts)`, `auth-actions/`).
+-   **Clarity:** Names should be descriptive and clearly indicate the purpose or content of the file/directory.
+
+## Specific File Types
+
+-   **Components:**
+    -   Use **PascalCase** for component file names (e.g., `[Button.tsx](mdc:src/components/ui/button.tsx)`, `[SpacePage.tsx](mdc:src/app/(protected)/_components/_spaces.$id/index.tsx)`).
+    -   Place reusable UI components in `[src/components/ui](mdc:src/components/ui)`.
+    -   Place feature-specific or route-specific components within their respective feature directories (e.g., `[src/app/(protected)/_components](mdc:src/app/(protected)/_components)`).
+    -   Client components requiring the `"use client"` directive should use the `.client.tsx` extension (e.g., `[page.client.tsx](mdc:src/app/spaces/[spaceId]/collector/page.client.tsx)`).
+    -   Server components (default) should use the `.tsx` extension.
+-   **Pages (App Router):**
+    -   Use `page.tsx` for page components (e.g., `[src/app/page.tsx](mdc:src/app/page.tsx)`, `[src/app/(protected)/dashboard/page.tsx](mdc:src/app/(protected)/dashboard/page.tsx)`).
+    -   Use `layout.tsx` for layout components.
+    -   Use `loading.tsx` for loading UI components.
+    -   Use `error.tsx` for error UI components.
+-   **API Routes (App Router):**
+    -   Place API route handlers in `[src/app/api](mdc:src/app/api)`.
+    -   Use `route.ts` for the route handler file (e.g., `[src/app/api/trpc/[trpc]/route.ts](mdc:src/app/api/trpc/[trpc]/route.ts)`).
+-   **TRPC:**
+    -   Place TRPC routers in `[src/server/api/routers](mdc:src/server/api/routers)`.
+    -   Place the root TRPC router configuration in `[src/server/api/root.ts](mdc:src/server/api/root.ts)`.
+    -   Place TRPC client setup in `[src/trpc/react.tsx](mdc:src/trpc/react.tsx)` and server setup in `[src/trpc/server.ts](mdc:src/trpc/server.ts)`.
+-   **Hooks:**
+    -   Place custom hooks in `[src/hooks](mdc:src/hooks)`.
+    -   Use the `use` prefix for hook filenames (e.g., `[use-trpc.ts](mdc:src/hooks/use-trpc.ts)`).
+-   **Utilities & Libraries:**
+    -   Place utility functions and library configurations in `[src/lib](mdc:src/lib)`.
+-   **Server-Side Logic:**
+    -   Place database schemas, queries, and server-specific logic in `[src/server](mdc:src/server)`.
+-   **Styles:**
+    -   Place global styles in `[src/styles](mdc:src/styles)`.
+
+## Directory Naming
+
+-   **Route Groups:** Use parentheses `()` for route groups that don't affect the URL path (e.g., `(auth)`, `(protected)`). See `[src/app/(protected)](mdc:src/app/(protected))`.
+-   **Dynamic Segments:** Use square brackets `[]` for dynamic route segments (e.g., `[spaceId]`). See `[src/app/(protected)/[spaceId]](mdc:src/app/(protected)/[spaceId])`.
+-   **Private Folders:** Prefix folder names with an underscore `_` to prevent them from being included in routing (e.g., `_components`). See `[src/app/(protected)/_components](mdc:src/app/(protected)/_components)`.

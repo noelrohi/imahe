@@ -1,0 +1,16 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# tRPC and React Query Usage Guide
+
+This project uses tRPC for API communication and integrates it with TanStack Query (React Query) for data fetching and mutation management on the client-side.
+
+## Common Pattern
+
+The typical pattern involves:
+
+1.  **Importing `useTRPC`:** Get the tRPC client instance using the custom `useTRPC` hook from `[@/lib/trpc](mdc:src/lib/trpc.ts)`.
+2.  **Fetching Data (`useSuspenseQuery`):** Use `useSuspenseQuery` for fetching data. Spread the `queryOptions` from the relevant tRPC procedure (e.g., `trpc.someQuery.queryOptions(...)`). This leverages React Suspense for loading states.
+3.  **Mutations (`useMutation`):** Use `useMutation` for creating, updating, or deleting data. Spread the `mutationOptions` from the tRPC procedure (e.g., `trpc.someMutation.mutationOptions()`). Define `onSuccess` and `onError` handlers for side effects like showing toasts or resetting forms.
