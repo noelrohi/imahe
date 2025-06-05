@@ -1,12 +1,12 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { APP_NAME } from "@/constants";
 import { authClient } from "@/lib/auth-client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { ModeToggle } from "./mode-toggle";
-import { APP_NAME } from "@/constants";
 
 export function SiteHeader() {
   const [isPending, startTransition] = useTransition();

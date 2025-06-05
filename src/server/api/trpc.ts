@@ -1,3 +1,5 @@
+import { auth } from "@/lib/auth";
+import { db } from "@/server/db";
 /**
  * YOU PROBABLY DON'T NEED TO EDIT THIS FILE, UNLESS:
  * 1. You want to modify request context (see Part 1).
@@ -7,11 +9,9 @@
  * need to use are documented accordingly near the end.
  */
 import { TRPCError, initTRPC } from "@trpc/server";
+import { cache } from "react";
 import superjson from "superjson";
 import { ZodError } from "zod";
-import { auth } from "@/lib/auth";
-import { db } from "@/server/db";
-import { cache } from "react";
 
 const getSession = cache(auth.api.getSession);
 
@@ -118,5 +118,10 @@ export const protectedProcedure = t.procedure
     if (!ctx.session?.user) {
       throw new TRPCError({ code: "UNAUTHORIZED" });
     }
-    return next();
+    return next({
+      ctx: {
+        ...ctx,
+        session: ctx.session,
+      },
+    });
   });

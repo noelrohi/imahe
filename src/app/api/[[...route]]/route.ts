@@ -1,9 +1,9 @@
-import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
-import { Scalar } from "@scalar/hono-api-reference";
-import { handle } from "hono/vercel";
-import { cors } from "hono/cors";
 import { APP_NAME } from "@/constants";
 import { env } from "@/env";
+import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
+import { Scalar } from "@scalar/hono-api-reference";
+import { cors } from "hono/cors";
+import { handle } from "hono/vercel";
 
 export const runtime = "nodejs";
 

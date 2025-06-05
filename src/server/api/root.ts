@@ -4,6 +4,8 @@ import {
   protectedProcedure,
   publicProcedure,
 } from "@/server/api/trpc";
+import { generationRouter } from "./routers/generation";
+import type { inferRouterOutputs } from "@trpc/server";
 
 /**
  * This is the primary router for your server.
@@ -17,6 +19,7 @@ export const appRouter = createTRPCRouter({
   public: publicProcedure.query(async ({ ctx }) => {
     return "This is a public route";
   }),
+  generation: generationRouter,
 });
 
 // export type definition of API
@@ -30,3 +33,5 @@ export type AppRouter = typeof appRouter;
  *       ^? Post[]
  */
 export const createCaller = createCallerFactory(appRouter);
+
+export type RouterOutput = inferRouterOutputs<AppRouter>;
