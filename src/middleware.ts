@@ -9,8 +9,14 @@ export async function middleware(request: NextRequest) {
     headers: await headers(),
   });
 
+  // If not authenticated and not on auth routes, redirect to login
   if (!session && !authRoutes.includes(request.nextUrl.pathname)) {
     return NextResponse.redirect(new URL("/login", request.url));
+  }
+
+  // If authenticated and on auth routes, redirect to dashboard
+  if (session && authRoutes.includes(request.nextUrl.pathname)) {
+    return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
   return NextResponse.next();
@@ -19,7 +25,6 @@ export async function middleware(request: NextRequest) {
 export const config = {
   runtime: "nodejs",
   matcher: [
-    "/dashboard",
     "/((?!api|trpc|_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt).*)",
   ],
 };

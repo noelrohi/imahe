@@ -61,7 +61,7 @@ export function SignUpForm({
   function onSubmit(values: FormSchema) {
     startTransition(async () => {
       await authClient.signUp.email(values, {
-        onSuccess: () => {
+        onSuccess: async () => {
           toast.success("Account created successfully");
           router.push("/login");
         },

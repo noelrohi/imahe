@@ -1,6 +1,5 @@
 "use client";
 
-import { falClient } from "@/lib/fal";
 import { cn } from "@/lib/utils";
 import { Image as ImageIcon, Upload, X } from "lucide-react";
 import { useCallback, useState } from "react";
@@ -40,14 +39,24 @@ export function FileUpload({
         onFileSelect(file);
 
         try {
-          // Upload file using fal.ai storage
-          const uploadedUrl = await falClient.storage.upload(file);
-          onUrlChange(uploadedUrl);
+          // Convert file to base64
+          const reader = new FileReader();
+          reader.onload = () => {
+            const base64String = reader.result as string;
+            onUrlChange(base64String);
+            setIsUploading(false);
+          };
+          reader.onerror = () => {
+            console.error("Failed to convert file to base64");
+            // Fallback to local URL if conversion fails
+            onUrlChange(localUrl);
+            setIsUploading(false);
+          };
+          reader.readAsDataURL(file);
         } catch (error) {
-          console.error("Upload failed:", error);
-          // Fallback to local URL if upload fails
+          console.error("File processing failed:", error);
+          // Fallback to local URL if processing fails
           onUrlChange(localUrl);
-        } finally {
           setIsUploading(false);
         }
       }
@@ -98,7 +107,7 @@ export function FileUpload({
                 <div className="absolute inset-0 bg-black/50 flex items-center justify-center rounded-lg">
                   <div className="bg-white rounded-lg p-3 flex items-center gap-2">
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary" />
-                    <span className="text-sm font-medium">Uploading...</span>
+                    <span className="text-sm font-medium">Processing...</span>
                   </div>
                 </div>
               )}
@@ -141,7 +150,7 @@ export function FileUpload({
                 {isUploading ? (
                   <>
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2" />
-                    Uploading...
+                    Processing...
                   </>
                 ) : (
                   "Choose File"

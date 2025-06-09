@@ -13,7 +13,7 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
 
-const polarClient = new Polar({
+export const polarClient = new Polar({
   accessToken: env.POLAR_ACCESS_TOKEN,
   // Use 'sandbox' if you're using the Polar Sandbox environment
   // Remember that access tokens, products, etc. are completely separated between environments.
@@ -40,16 +40,26 @@ export const auth = betterAuth({
         checkout({
           products: [
             {
-              productId: "31e659bf-c4ad-4dd7-be0e-08608e17f534",
-              slug: "Free",
+              productId: "9d97501f-10fe-4186-a667-1994d6f90c93",
+              slug: "free",
             },
             {
-              productId: "93e62fc0-13dc-41d3-868d-5c7d4ef541fc",
-              slug: "Pro",
+              productId: "b1854026-9971-4fd1-8c7d-7ada0ae590fe",
+              slug: "pro",
+            },
+            {
+              productId: "a9175fdc-9fe1-4f3c-bd6e-b849c472fdb0",
+              slug: "usage-based",
             },
           ],
           successUrl: `${env.NEXT_PUBLIC_APP_URL}/success?checkout_id={CHECKOUT_ID}`,
           authenticatedUsersOnly: true,
+        }),
+        webhooks({
+          secret: env.POLAR_WEBHOOK_SECRET,
+          onPayload: async (payload) => {
+            console.log("[POLAR] PAYLOAD ", payload);
+          },
         }),
       ],
     }),
