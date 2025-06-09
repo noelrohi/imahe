@@ -7,7 +7,7 @@ import { user } from "./auth";
 export const generations = pgTable(
   "generations",
   {
-    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
+    id: text("id").primaryKey().notNull(),
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),

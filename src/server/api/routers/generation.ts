@@ -1,7 +1,6 @@
 import { env } from "@/env";
 import { fal } from "@fal-ai/client";
-import { createId } from "@paralleldrive/cuid2";
-import { eq } from "drizzle-orm";
+import { nanoid } from "nanoid";
 import { z } from "zod";
 import { generations } from "../../db/schema/generations";
 import { createTRPCRouter, protectedProcedure } from "../trpc";
@@ -41,6 +40,7 @@ export const generationRouter = createTRPCRouter({
       try {
         // Save to database
         const values = input.images.map((image) => ({
+          id: nanoid(),
           requestId: input.requestId,
           userId: ctx.session.user.id,
           url: image.url,
