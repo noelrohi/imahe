@@ -1,8 +1,9 @@
 import { ZodError } from 'zod';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
-import { nodeGenerateDoneEventPayloadSchema } from './schemas';
+import { getIma2BrowserId } from './browser-id';
 import { Ima2HttpError, createIma2Client } from './client';
+import { nodeGenerateDoneEventPayloadSchema } from './schemas';
 
 const PNG_DATA_URL =
   'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=';
@@ -13,6 +14,31 @@ function jsonResponse(payload: unknown, init: ResponseInit = {}) {
     ...init,
   });
 }
+
+describe('browser id helper', () => {
+  it('persists a safe browser id in localStorage', () => {
+    const storedValues = new Map<string, string>();
+    const storage = {
+      getItem: vi.fn((key: string) => storedValues.get(key) ?? null),
+      setItem: vi.fn((key: string, value: string) => {
+        storedValues.set(key, value);
+      }),
+    } as unknown as Storage;
+
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      value: storage,
+    });
+
+    const firstBrowserId = getIma2BrowserId();
+    const secondBrowserId = getIma2BrowserId();
+
+    expect(firstBrowserId).toMatch(/^imahe-[A-Za-z0-9._~-]+$/);
+    expect(secondBrowserId).toBe(firstBrowserId);
+    expect(storage.setItem).toHaveBeenCalledWith('imahe.browserId', firstBrowserId);
+    expect(storage.getItem('imahe.browserId')).toBe(firstBrowserId);
+  });
+});
 
 describe('Ima2Client', () => {
   it('parses a valid health response', async () => {
@@ -230,6 +256,59 @@ describe('Ima2Client', () => {
     expect(fetchCalls.map(String)).toEqual([
       'http://127.0.0.1:4567/api/history?limit=1&before=2000&beforeFilename=folder%2Fdog.png',
     ]);
+  });
+
+  it('sends browser id headers on history requests and supports favoritesOnly', async () => {
+    const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
+    const client = createIma2Client({
+      getBaseUrl: () => 'http://127.0.0.1:4567',
+      getBrowserId: () => 'imahe-test-browser',
+      fetchImpl: async (input, init) => {
+        fetchCalls.push({ input, init });
+        return jsonResponse({ items: [], total: 0, nextCursor: null });
+      },
+    });
+
+    await expect(client.history({ favoritesOnly: true })).resolves.toMatchObject({
+      items: [],
+      total: 0,
+    });
+
+    expect(fetchCalls).toHaveLength(1);
+    expect(String(fetchCalls[0].input)).toBe(
+      'http://127.0.0.1:4567/api/history?favoritesOnly=1',
+    );
+    expect(new Headers(fetchCalls[0].init?.headers).get('X-Ima2-Browser-Id')).toBe(
+      'imahe-test-browser',
+    );
+  });
+
+  it('toggles favorites through the ima2 history favorite endpoint', async () => {
+    const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
+    const client = createIma2Client({
+      getBaseUrl: () => 'http://127.0.0.1:4567',
+      getBrowserId: () => 'imahe-test-browser',
+      fetchImpl: async (input, init) => {
+        fetchCalls.push({ input, init });
+        return jsonResponse({ isFavorite: true });
+      },
+    });
+
+    await expect(client.toggleFavorite('folder/cat one.png')).resolves.toEqual({
+      isFavorite: true,
+    });
+
+    expect(fetchCalls).toHaveLength(1);
+    expect(String(fetchCalls[0].input)).toBe(
+      'http://127.0.0.1:4567/api/history/favorite',
+    );
+    expect(fetchCalls[0].init?.method).toBe('POST');
+    expect(fetchCalls[0].init?.body).toBe(
+      JSON.stringify({ filename: 'folder/cat one.png' }),
+    );
+    expect(new Headers(fetchCalls[0].init?.headers).get('X-Ima2-Browser-Id')).toBe(
+      'imahe-test-browser',
+    );
   });
 
   it('rejects malformed history items', async () => {

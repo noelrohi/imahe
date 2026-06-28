@@ -1,17 +1,38 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { GitBranchIcon, ImagePlusIcon, SparklesIcon } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
+import {
+  type InfiniteData,
+  type QueryKey,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
+import {
+  FolderPlusIcon,
+  GitBranchIcon,
+  ImagePlusIcon,
+  SparklesIcon,
+  StarIcon,
+} from 'lucide-react';
 
-import type { HistoryItem } from '@/lib/ima2/schemas';
-import type { AssetRecord } from '@/shared/ipc';
+import {
+  useAddAssetToCollectionMutation,
+  useCollections,
+} from '@/features/collections/hooks';
 import { CanvasEditorDialog } from '@/features/canvas/CanvasEditorDialog';
 import { useGenerate, type UiGenerationProvider } from '@/features/generate/hooks';
+import { assetUrlsToBase64References } from '@/features/remix/references';
 import {
   apiProviderToUiProvider,
   lineageQueryKeys,
   useRemix,
 } from '@/features/remix/useRemix';
-import { assetUrlsToBase64References } from '@/features/remix/references';
+import { ima2Client } from '@/lib/ima2/client';
+import type {
+  FavoriteResponse,
+  HistoryItem,
+  HistoryResponse,
+} from '@/lib/ima2/schemas';
+import type { AssetRecord } from '@/shared/ipc';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -28,11 +49,20 @@ import {
   InputGroupButton,
   InputGroupTextarea,
 } from '@/components/ui/input-group';
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 
 import { formatCreatedAt, getAssetTitle, isVideoAsset } from './assetMetadata';
 import { useAssetUrl } from './useAssetUrl';
+import { historyQueryKey } from './useHistory';
 
 const DEFAULT_IMAGE_SIZE = '1024x1024';
 const DEFAULT_VARIANT_COUNT = 3;
@@ -46,26 +76,45 @@ type AssetDetailDialogProps = {
   asset: HistoryItem | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onDelete: (asset: HistoryItem) => void;
+  onAssetChange?: (asset: HistoryItem) => void;
+  onDelete?: (asset: HistoryItem) => void;
   onSelectAsset?: (asset: HistoryItem) => void;
   historyItems?: HistoryItem[];
   isDeleting?: boolean;
   deleteError?: string | null;
+  activeCollectionName?: string;
+  onRemoveFromCollection?: (asset: HistoryItem) => void;
+  isRemovingFromCollection?: boolean;
+  removeFromCollectionError?: string | null;
+};
+
+type FavoriteMutationContext = {
+  previousHistory: Array<[QueryKey, InfiniteData<HistoryResponse> | undefined]>;
+  previousAsset: HistoryItem;
 };
 
 export function AssetDetailDialog({
   asset,
   open,
   onOpenChange,
+  onAssetChange,
   onDelete,
   onSelectAsset,
   historyItems = [],
   isDeleting = false,
   deleteError = null,
+  activeCollectionName,
+  onRemoveFromCollection,
+  isRemovingFromCollection = false,
+  removeFromCollectionError = null,
 }: AssetDetailDialogProps) {
   const fullAssetUrl = useAssetUrl(asset?.url);
+  const queryClient = useQueryClient();
+  const collectionsQuery = useCollections({ enabled: open && asset !== null });
+  const addToCollectionMutation = useAddAssetToCollectionMutation();
   const remixMutation = useRemix();
   const variantsMutation = useGenerate();
+  const [selectedCollectionId, setSelectedCollectionId] = useState('');
   const [actionPrompt, setActionPrompt] = useState('');
   const [localActionError, setLocalActionError] = useState<string | null>(null);
   const [canvasOpen, setCanvasOpen] = useState(false);
@@ -82,6 +131,55 @@ export function AssetDetailDialog({
     enabled: open && assetFilename.length > 0,
   });
 
+  const favoriteMutation = useMutation<
+    FavoriteResponse,
+    Error,
+    HistoryItem,
+    FavoriteMutationContext
+  >({
+    mutationFn: (targetAsset) => ima2Client.toggleFavorite(targetAsset.filename),
+    onMutate: async (targetAsset) => {
+      const nextFavorite = targetAsset.isFavorite !== true;
+      const nextAsset = { ...targetAsset, isFavorite: nextFavorite };
+
+      await queryClient.cancelQueries({ queryKey: historyQueryKey });
+      const previousHistory = queryClient.getQueriesData<InfiniteData<HistoryResponse>>({
+        queryKey: historyQueryKey,
+      });
+
+      queryClient.setQueriesData<InfiniteData<HistoryResponse>>(
+        { queryKey: historyQueryKey },
+        (current) => updateHistoryFavorite(current, targetAsset.filename, nextFavorite),
+      );
+      onAssetChange?.(nextAsset);
+
+      return { previousHistory, previousAsset: targetAsset };
+    },
+    onError: (_error, _targetAsset, context) => {
+      context?.previousHistory.forEach(([queryKey, data]) => {
+        queryClient.setQueryData(queryKey, data);
+      });
+
+      if (context?.previousAsset) {
+        onAssetChange?.(context.previousAsset);
+      }
+    },
+    onSuccess: (response, targetAsset) => {
+      const nextAsset = { ...targetAsset, isFavorite: response.isFavorite };
+
+      queryClient.setQueriesData<InfiniteData<HistoryResponse>>(
+        { queryKey: historyQueryKey },
+        (current) => updateHistoryFavorite(current, targetAsset.filename, response.isFavorite),
+      );
+      onAssetChange?.(nextAsset);
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: historyQueryKey });
+    },
+  });
+
+  const collections = collectionsQuery.data ?? [];
+
   useEffect(() => {
     setActionPrompt(asset?.prompt ?? '');
     setLocalActionError(null);
@@ -90,8 +188,19 @@ export function AssetDetailDialog({
   useEffect(() => {
     if (!open) {
       setCanvasOpen(false);
+      setSelectedCollectionId('');
+      return;
     }
-  }, [open]);
+
+    if (selectedCollectionId && !collections.some((item) => item.id === selectedCollectionId)) {
+      setSelectedCollectionId('');
+      return;
+    }
+
+    if (!selectedCollectionId && collections.length > 0) {
+      setSelectedCollectionId(collections[0].id);
+    }
+  }, [collections, open, selectedCollectionId]);
 
   const historyByFilename = useMemo(() => {
     const nextHistoryByFilename = new Map<string, HistoryItem>();
@@ -121,10 +230,13 @@ export function AssetDetailDialog({
   const currentRecord = assetRecordQuery.data ?? null;
   const children = childrenQuery.data ?? [];
   const parentId = currentRecord?.parentId ?? null;
+  const isFavorite = asset.isFavorite === true;
+  const canAddToCollection = selectedCollectionId.length > 0;
   const actionErrorMessage =
     localActionError ??
-    (remixMutation.error ? errorToMessage(remixMutation.error) : null) ??
-    (variantsMutation.error ? errorToMessage(variantsMutation.error) : null);
+    (remixMutation.error ? getErrorMessage(remixMutation.error) : null) ??
+    (variantsMutation.error ? getErrorMessage(variantsMutation.error) : null);
+  const selectLineageAsset = onSelectAsset ?? onAssetChange;
 
   const handleRemix = () => {
     if (actionDisabled) {
@@ -144,7 +256,7 @@ export function AssetDetailDialog({
         format: 'png',
         moderation: 'low',
       })
-      .catch((error) => setLocalActionError(errorToMessage(error)));
+      .catch((error) => setLocalActionError(getErrorMessage(error)));
   };
 
   const handleMakeVariants = () => {
@@ -160,7 +272,7 @@ export function AssetDetailDialog({
       provider: sourceProvider,
       model: sourceModel,
       mutateAsync: variantsMutation.mutateAsync,
-    }).catch((error) => setLocalActionError(errorToMessage(error)));
+    }).catch((error) => setLocalActionError(getErrorMessage(error)));
   };
 
   return (
@@ -203,7 +315,7 @@ export function AssetDetailDialog({
                 children={children}
                 historyByFilename={historyByFilename}
                 isLoading={assetRecordQuery.isPending || childrenQuery.isPending}
-                onSelectAsset={onSelectAsset}
+                onSelectAsset={selectLineageAsset}
               />
             </div>
           </div>
@@ -281,6 +393,99 @@ export function AssetDetailDialog({
               />
             </dl>
 
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_auto]">
+              <div className="flex flex-col gap-2 rounded-lg border bg-muted/20 p-3">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <FolderPlusIcon aria-hidden="true" />
+                  Add to collection
+                </div>
+                {collectionsQuery.isPending ? (
+                  <p className="text-sm text-muted-foreground">Loading collections…</p>
+                ) : collectionsQuery.isError ? (
+                  <p role="alert" className="text-sm text-destructive">
+                    {getErrorMessage(collectionsQuery.error)}
+                  </p>
+                ) : collections.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Create a collection first, then add this asset to it.
+                  </p>
+                ) : (
+                  <form
+                    className="flex flex-col gap-2 sm:flex-row"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+
+                      if (!canAddToCollection) {
+                        return;
+                      }
+
+                      addToCollectionMutation.mutate({
+                        collectionId: selectedCollectionId,
+                        assetId: asset.filename,
+                      });
+                    }}
+                  >
+                    <Select
+                      value={selectedCollectionId}
+                      onValueChange={setSelectedCollectionId}
+                      disabled={addToCollectionMutation.isPending}
+                    >
+                      <SelectTrigger aria-label="Collection" className="w-full sm:w-64">
+                        <SelectValue placeholder="Choose collection" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          {collections.map((collection) => (
+                            <SelectItem key={collection.id} value={collection.id}>
+                              {collection.name}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="submit"
+                      variant="outline"
+                      disabled={!canAddToCollection || addToCollectionMutation.isPending}
+                    >
+                      {addToCollectionMutation.isPending ? 'Adding…' : 'Add'}
+                    </Button>
+                  </form>
+                )}
+                {addToCollectionMutation.isError ? (
+                  <p role="alert" className="text-sm text-destructive">
+                    {getErrorMessage(addToCollectionMutation.error)}
+                  </p>
+                ) : null}
+                {removeFromCollectionError ? (
+                  <p role="alert" className="text-sm text-destructive">
+                    {removeFromCollectionError}
+                  </p>
+                ) : null}
+              </div>
+
+              {onRemoveFromCollection ? (
+                <div className="flex flex-col justify-center gap-2 rounded-lg border bg-muted/20 p-3">
+                  <p className="text-sm text-muted-foreground">
+                    In {activeCollectionName ?? 'this collection'}
+                  </p>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    disabled={isRemovingFromCollection}
+                    onClick={() => onRemoveFromCollection(asset)}
+                  >
+                    {isRemovingFromCollection ? 'Removing…' : 'Remove from collection'}
+                  </Button>
+                </div>
+              ) : null}
+            </div>
+
+            {favoriteMutation.isError ? (
+              <p role="alert" className="text-sm text-destructive">
+                {getErrorMessage(favoriteMutation.error)}
+              </p>
+            ) : null}
             {deleteError ? (
               <p role="alert" className="text-sm text-destructive">
                 {deleteError}
@@ -289,23 +494,41 @@ export function AssetDetailDialog({
           </div>
 
           <DialogFooter className="mx-0 mb-0 rounded-none border-t bg-background sm:justify-between">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setCanvasOpen(true)}
-              disabled={canvasUnavailable}
-              title={assetIsVideo ? 'Canvas inpaint is available for images only.' : undefined}
-            >
-              Edit in Canvas
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={() => onDelete(asset)}
-              disabled={isDeleting}
-            >
-              {isDeleting ? 'Deleting…' : 'Delete'}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setCanvasOpen(true)}
+                disabled={canvasUnavailable}
+                title={assetIsVideo ? 'Canvas inpaint is available for images only.' : undefined}
+              >
+                Edit in Canvas
+              </Button>
+              <Button
+                type="button"
+                variant={isFavorite ? 'secondary' : 'outline'}
+                aria-pressed={isFavorite}
+                disabled={favoriteMutation.isPending}
+                onClick={() => favoriteMutation.mutate(asset)}
+              >
+                <StarIcon data-icon="inline-start" />
+                {favoriteMutation.isPending
+                  ? 'Saving…'
+                  : isFavorite
+                    ? 'Favorited'
+                    : 'Favorite'}
+              </Button>
+            </div>
+            {onDelete ? (
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={() => onDelete(asset)}
+                disabled={isDeleting}
+              >
+                {isDeleting ? 'Deleting…' : 'Delete'}
+              </Button>
+            ) : null}
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -521,6 +744,39 @@ function MetadataItem({ label, value }: MetadataItemProps) {
   );
 }
 
-function errorToMessage(error: unknown) {
-  return error instanceof Error ? error.message : 'Generation failed.';
+function updateHistoryFavorite(
+  current: InfiniteData<HistoryResponse> | undefined,
+  filename: string,
+  isFavorite: boolean,
+) {
+  if (!current) {
+    return current;
+  }
+
+  let changed = false;
+
+  const pages = current.pages.map((page) => ({
+    ...page,
+    items: page.items.map((item) => {
+      if (item.filename !== filename) {
+        return item;
+      }
+
+      changed = true;
+      return { ...item, isFavorite };
+    }),
+  }));
+
+  if (!changed) {
+    return current;
+  }
+
+  return {
+    ...current,
+    pages,
+  };
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : 'Unknown error';
 }

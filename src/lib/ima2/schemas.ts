@@ -327,6 +327,12 @@ export const nodeResponseSchema = z
   })
   .passthrough();
 
+export const favoriteResponseSchema = z
+  .object({
+    isFavorite: z.boolean(),
+  })
+  .passthrough();
+
 const PNG_DATA_URL_RE = /^data:image\/png;base64,/;
 const BASE64_RE = /^[A-Za-z0-9+/]+={0,2}$/;
 const PNG_SIGNATURE = [137, 80, 78, 71, 13, 10, 26, 10] as const;
@@ -427,3 +433,4 @@ export type HistoryResponse = z.infer<typeof historyResponseSchema>;
 export type DeleteAssetResponse = z.infer<typeof deleteAssetResponseSchema>;
 export type RestoreAssetResponse = z.infer<typeof restoreAssetResponseSchema>;
 export type NodeResponse = z.infer<typeof nodeResponseSchema>;
+export type FavoriteResponse = z.infer<typeof favoriteResponseSchema>;

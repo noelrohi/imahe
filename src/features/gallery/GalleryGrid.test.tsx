@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -15,6 +16,7 @@ import type {
   DeleteAssetResponse,
   HistoryItem,
   HistoryResponse,
+  FavoriteResponse,
   RestoreAssetResponse,
 } from '@/lib/ima2/schemas';
 
@@ -25,6 +27,7 @@ vi.mock('@/lib/ima2/client', () => ({
     history: vi.fn(),
     deleteAsset: vi.fn(),
     restoreAsset: vi.fn(),
+    toggleFavorite: vi.fn(),
   },
 }));
 
@@ -33,6 +36,9 @@ type MockedIma2Client = {
   deleteAsset: ReturnType<typeof vi.fn<(filename: string) => Promise<DeleteAssetResponse>>>;
   restoreAsset: ReturnType<
     typeof vi.fn<(filename: string, trashId: string) => Promise<RestoreAssetResponse>>
+  >;
+  toggleFavorite: ReturnType<
+    typeof vi.fn<(filename: string) => Promise<FavoriteResponse>>
   >;
 };
 
@@ -59,10 +65,10 @@ beforeEach(() => {
         },
         collections: {
           create: vi.fn(),
-          list: vi.fn(),
+          list: vi.fn(async () => []),
           addAsset: vi.fn(),
           removeAsset: vi.fn(),
-          listAssets: vi.fn(),
+          listAssets: vi.fn(async () => []),
         },
       },
     },
@@ -128,6 +134,44 @@ describe('GalleryGrid', () => {
     expect(within(dialog).getByRole('img', { name: 'Cat prompt' })).toHaveAttribute(
       'src',
       'http://127.0.0.1:4890/generated/cat.png',
+    );
+  });
+
+  it('favorites optimistically and rolls back with an error on failure', async () => {
+    const cat = createAsset('cat.png', { prompt: 'Cat prompt', isFavorite: false });
+    let rejectFavorite!: (error: Error) => void;
+    const favoritePromise = new Promise<FavoriteResponse>((_resolve, reject) => {
+      rejectFavorite = reject;
+    });
+
+    mockedClient.history.mockResolvedValue({ items: [cat], total: 1, nextCursor: null });
+    mockedClient.toggleFavorite.mockReturnValue(favoritePromise);
+
+    renderGallery();
+
+    fireEvent.click(await screen.findByRole('button', { name: /Open asset Cat prompt/i }));
+
+    const dialog = await screen.findByRole('dialog');
+    const favoriteButton = within(dialog).getByRole('button', { name: /^Favorite$/i });
+
+    fireEvent.click(favoriteButton);
+
+    await waitFor(() => {
+      expect(mockedClient.toggleFavorite).toHaveBeenCalledWith('cat.png');
+    });
+    expect(within(dialog).getByRole('button', { name: /Saving/i })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+
+    await act(async () => {
+      rejectFavorite(new Error('favorite failed'));
+    });
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('favorite failed');
+    expect(within(dialog).getByRole('button', { name: /^Favorite$/i })).toHaveAttribute(
+      'aria-pressed',
+      'false',
     );
   });
 

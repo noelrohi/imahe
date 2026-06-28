@@ -6,6 +6,7 @@ import {
   deleteAssetResponseSchema,
   editRequestSchema,
   editResponseSchema,
+  favoriteResponseSchema,
   generateRequestSchema,
   grokStatusResponseSchema,
   historyResponseSchema,
@@ -27,6 +28,7 @@ import {
   type DeleteAssetResponse,
   type EditRequest,
   type EditResponse,
+  type FavoriteResponse,
   type GenerateRequest,
   type GrokStatusResponse,
   type HistoryResponse,
@@ -41,9 +43,11 @@ import {
   type QuotaResponse,
   type RestoreAssetResponse,
 } from './schemas';
+import { getIma2BrowserId } from './browser-id';
 
 type FetchImpl = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 type GetBaseUrl = () => Promise<string | null> | string | null;
+type GetBrowserId = () => string;
 type ResponseSchema<T> = {
   parse: (payload: unknown) => T;
 };
@@ -87,6 +91,7 @@ export type HistoryParams = {
 export type Ima2ClientOptions = {
   fetchImpl?: FetchImpl;
   getBaseUrl?: GetBaseUrl;
+  getBrowserId?: GetBrowserId;
 };
 
 export class Ima2HttpError extends Error {
@@ -113,10 +118,12 @@ export class Ima2UnavailableError extends Error {
 export class Ima2Client {
   private readonly fetchImpl: FetchImpl;
   private readonly getBaseUrl: GetBaseUrl;
+  private readonly getBrowserId: GetBrowserId;
 
   constructor(options: Ima2ClientOptions = {}) {
     this.fetchImpl = options.fetchImpl ?? defaultFetchImpl;
     this.getBaseUrl = options.getBaseUrl ?? getWindowSidecarBaseUrl;
+    this.getBrowserId = options.getBrowserId ?? getIma2BrowserId;
   }
 
   health(): Promise<Ima2Health> {
@@ -224,7 +231,17 @@ export class Ima2Client {
   }
 
   history(params: HistoryParams = {}): Promise<HistoryResponse> {
-    return this.request(buildHistoryPath(params), historyResponseSchema);
+    return this.request(buildHistoryPath(params), historyResponseSchema, {
+      headers: this.browserIdHeaders(),
+    });
+  }
+
+  toggleFavorite(filename: string): Promise<FavoriteResponse> {
+    return this.request('/api/history/favorite', favoriteResponseSchema, {
+      method: 'POST',
+      headers: this.browserIdHeaders(),
+      body: JSON.stringify({ filename }),
+    });
   }
 
   deleteAsset(filename: string): Promise<DeleteAssetResponse> {
@@ -281,6 +298,12 @@ export class Ima2Client {
     const payload: unknown = await response.json();
     return schema.parse(payload);
   }
+
+  private browserIdHeaders() {
+    return {
+      'X-Ima2-Browser-Id': this.getBrowserId(),
+    };
+  }
 }
 
 export function createIma2Client(options: Ima2ClientOptions = {}) {
@@ -322,8 +345,8 @@ function buildHistoryPath(params: HistoryParams) {
   appendSearchParam(searchParams, 'requestId', params.requestId);
   appendSearchParam(searchParams, 'groupBy', params.groupBy);
 
-  if (params.favoritesOnly !== undefined) {
-    searchParams.set('favoritesOnly', params.favoritesOnly ? 'true' : 'false');
+  if (params.favoritesOnly) {
+    searchParams.set('favoritesOnly', '1');
   }
 
   const query = searchParams.toString();
