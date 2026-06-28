@@ -53,6 +53,17 @@ Modeled loosely on Ideogram (see reference), kept deliberately simple, built fro
 - **imahe**'s renderer talks to the **Sidecar** over ima2's REST API
 - The **Sidecar** writes images into the **Generated store**, which imahe reads/displays
 
+## Tech stack
+
+- **Runtime/build**: Bun, Electron Forge + Vite (split main/preload/renderer configs).
+- **UI**: React + Tailwind v4 + shadcn/ui. `@/` → `src/` alias.
+- **Routing**: TanStack Router, **file-based** (`@tanstack/router-plugin` + generated `routeTree.gen.ts`), **hash history** for packaged `file://`. (Migrated off react-router — see ADR 0004.)
+- **Server state**: TanStack Query — all ima2 sidecar reads/mutations (history, providers, OAuth polling, SSE-driven job state, optimistic favorites).
+- **API boundary**: a typed `ima2` client module (fetch + **Zod** validation) wrapping the sidecar base URL; all Query hooks call it. Zod is the runtime guard because ima2's response field shapes are third-party/unverified.
+- **Local state**: `useState` + Query. No Zustand/Redux unless global job state forces it.
+- **imahe store**: better-sqlite3, raw SQL, main-process only (no ORM). See ADR 0003.
+- **Renderer↔main**: typed IPC bridge (`window.imahe`, channels in `src/shared/ipc.ts`).
+
 ## Scope decisions
 
 - **Auth is OAuth-only**, for **OpenAI** (ChatGPT/Codex login) and **Grok** only. No API-key entry, no Gemini, in v1. Settings = two "Sign in" buttons + connection status.
