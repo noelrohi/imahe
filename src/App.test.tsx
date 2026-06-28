@@ -1,8 +1,14 @@
+import { QueryClientProvider } from '@tanstack/react-query';
+import {
+  RouterProvider,
+  createMemoryHistory,
+  createRouter,
+} from '@tanstack/react-router';
 import { render, screen } from '@testing-library/react';
-import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 import { beforeAll, describe, expect, it } from 'vitest';
 
-import { routes } from './App';
+import { createAppQueryClient } from './lib/query';
+import { routeTree } from './routeTree.gen';
 
 beforeAll(() => {
   if (!window.matchMedia) {
@@ -23,15 +29,27 @@ beforeAll(() => {
         }) as MediaQueryList,
     });
   }
+
+  window.scrollTo = (): void => undefined;
 });
 
 describe('App', () => {
-  it('renders the imahe shell navigation', () => {
-    const router = createMemoryRouter(routes, { initialEntries: ['/'] });
+  it('renders the imahe shell navigation', async () => {
+    const queryClient = createAppQueryClient();
+    const router = createRouter({
+      routeTree,
+      history: createMemoryHistory({ initialEntries: ['/'] }),
+    });
 
-    render(<RouterProvider router={router} />);
+    await router.load();
 
-    expect(screen.getByRole('link', { name: /Home/i })).toBeInTheDocument();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByRole('link', { name: /Home/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Settings/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Collections/i })).toBeInTheDocument();
   });

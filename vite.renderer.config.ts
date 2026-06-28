@@ -1,10 +1,19 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
+import { tanstackRouter } from '@tanstack/router-plugin/vite';
 import path from 'node:path';
 
 // https://vitejs.dev/config
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    tanstackRouter({
+      target: 'react',
+      routesDirectory: './src/routes',
+      routeFileIgnorePattern: '^(Home|Settings|Collections)\\.tsx$',
+    }),
+    react(),
+    tailwindcss(),
+  ],
   resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
 });
