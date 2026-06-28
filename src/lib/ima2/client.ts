@@ -1,9 +1,29 @@
-import { ima2HealthSchema, type Ima2Health } from './schemas';
+import {
+  deleteAssetResponseSchema,
+  historyResponseSchema,
+  ima2HealthSchema,
+  restoreAssetResponseSchema,
+  type DeleteAssetResponse,
+  type HistoryResponse,
+  type Ima2Health,
+  type RestoreAssetResponse,
+} from './schemas';
 
 type FetchImpl = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 type GetBaseUrl = () => Promise<string | null> | string | null;
 type ResponseSchema<T> = {
   parse: (payload: unknown) => T;
+};
+
+export type HistoryParams = {
+  limit?: number;
+  before?: number | string;
+  beforeFilename?: string;
+  since?: number | string;
+  sessionId?: string;
+  requestId?: string;
+  favoritesOnly?: boolean;
+  groupBy?: 'session';
 };
 
 export type Ima2ClientOptions = {
@@ -45,17 +65,51 @@ export class Ima2Client {
     return this.request('/api/health', ima2HealthSchema);
   }
 
-  private async request<T>(pathname: string, schema: ResponseSchema<T>): Promise<T> {
+  history(params: HistoryParams = {}): Promise<HistoryResponse> {
+    return this.request(buildHistoryPath(params), historyResponseSchema);
+  }
+
+  deleteAsset(filename: string): Promise<DeleteAssetResponse> {
+    return this.request(
+      `/api/history/${encodeURIComponent(filename)}`,
+      deleteAssetResponseSchema,
+      { method: 'DELETE' },
+    );
+  }
+
+  restoreAsset(filename: string, trashId: string): Promise<RestoreAssetResponse> {
+    return this.request(
+      `/api/history/${encodeURIComponent(filename)}/restore`,
+      restoreAssetResponseSchema,
+      {
+        method: 'POST',
+        body: JSON.stringify({ trashId }),
+      },
+    );
+  }
+
+  private async request<T>(
+    pathname: string,
+    schema: ResponseSchema<T>,
+    init: RequestInit = {},
+  ): Promise<T> {
     const baseUrl = await this.getBaseUrl();
 
     if (!baseUrl) {
       throw new Ima2UnavailableError();
     }
 
+    const headers = new Headers(init.headers);
+    if (!headers.has('Accept')) {
+      headers.set('Accept', 'application/json');
+    }
+    if (init.body && !headers.has('Content-Type')) {
+      headers.set('Content-Type', 'application/json');
+    }
+
     const response = await this.fetchImpl(new URL(pathname, baseUrl), {
-      headers: {
-        Accept: 'application/json',
-      },
+      ...init,
+      headers,
     });
 
     if (!response.ok) {
@@ -83,6 +137,35 @@ function defaultFetchImpl(input: RequestInfo | URL, init?: RequestInit) {
 
 function getWindowSidecarBaseUrl(): Promise<string | null> {
   return window.imahe.getSidecarBaseUrl();
+}
+
+function buildHistoryPath(params: HistoryParams) {
+  const searchParams = new URLSearchParams();
+
+  appendSearchParam(searchParams, 'limit', params.limit);
+  appendSearchParam(searchParams, 'before', params.before);
+  appendSearchParam(searchParams, 'beforeFilename', params.beforeFilename);
+  appendSearchParam(searchParams, 'since', params.since);
+  appendSearchParam(searchParams, 'sessionId', params.sessionId);
+  appendSearchParam(searchParams, 'requestId', params.requestId);
+  appendSearchParam(searchParams, 'groupBy', params.groupBy);
+
+  if (params.favoritesOnly !== undefined) {
+    searchParams.set('favoritesOnly', params.favoritesOnly ? 'true' : 'false');
+  }
+
+  const query = searchParams.toString();
+  return query ? `/api/history?${query}` : '/api/history';
+}
+
+function appendSearchParam(
+  searchParams: URLSearchParams,
+  key: string,
+  value: string | number | undefined,
+) {
+  if (value !== undefined) {
+    searchParams.set(key, String(value));
+  }
 }
 
 async function readErrorBody(response: Response): Promise<string | undefined> {
