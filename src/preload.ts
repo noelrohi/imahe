@@ -12,6 +12,8 @@ import {
 const imaheApi: ImaheApi = {
   getSidecarBaseUrl: () =>
     ipcRenderer.invoke(IPC_CHANNELS.sidecarGetBaseUrl) as Promise<SidecarBaseUrl>,
+  openExternal: (url: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.shellOpenExternal, url) as Promise<void>,
   store: {
     assets: {
       upsert: (asset: UpsertAssetPayload) =>

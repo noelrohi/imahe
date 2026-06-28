@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import path from 'node:path';
 import started from 'electron-squirrel-startup';
 
@@ -20,6 +20,7 @@ if (started) {
 }
 
 ipcMain.handle(IPC_CHANNELS.sidecarGetBaseUrl, () => getBaseUrl());
+ipcMain.handle(IPC_CHANNELS.shellOpenExternal, (_event, url: unknown) => openExternalUrl(url));
 ipcMain.handle(IPC_CHANNELS.storeAssetsUpsert, (_event, asset: UpsertAssetPayload) =>
   upsertAsset(asset),
 );
@@ -45,6 +46,26 @@ ipcMain.handle(
 ipcMain.handle(IPC_CHANNELS.storeCollectionsListAssets, (_event, collectionId: string) =>
   listAssetsInCollection(collectionId),
 );
+
+async function openExternalUrl(url: unknown): Promise<void> {
+  if (typeof url !== 'string') {
+    throw new Error('Only valid HTTPS URLs can be opened externally.');
+  }
+
+  let parsedUrl: URL;
+
+  try {
+    parsedUrl = new URL(url);
+  } catch {
+    throw new Error('Only valid HTTPS URLs can be opened externally.');
+  }
+
+  if (parsedUrl.protocol !== 'https:') {
+    throw new Error('Only HTTPS URLs can be opened externally.');
+  }
+
+  await shell.openExternal(parsedUrl.toString());
+}
 
 const createWindow = () => {
   // Create the browser window.
