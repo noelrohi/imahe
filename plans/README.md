@@ -12,7 +12,7 @@ This is a **greenfield build-out**, not an audit. Plans turn the agreed design i
 |------|-------|----------|--------|------------|--------|
 | 001  | Project foundations: React + Tailwind + shadcn, verification baseline, baseline commit | P1 | M | — | DONE (2ada510) |
 | 002  | Sidecar lifecycle: bundle & spawn ima2, port + health, preload bridge | P1 | M | 001 | DONE (c1550df) |
-| 003  | imahe SQLite store: schema, migrations, asar.unpack, IPC data layer | P1 | M | 001, 002 | TODO |
+| 003  | imahe SQLite store: schema, migrations, asar.unpack, IPC data layer | P1 | M | 001, 002 | DONE (cc0931b) |
 | 004  | App shell + shadcn sidebar navigation | P1 | S | 001 | TODO |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (one-line reason) | REJECTED (one-line rationale)
