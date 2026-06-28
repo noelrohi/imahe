@@ -1,6 +1,7 @@
 import { ZodError } from 'zod';
 import { describe, expect, it } from 'vitest';
 
+import { nodeGenerateDoneEventPayloadSchema } from './schemas';
 import { Ima2HttpError, createIma2Client } from './client';
 
 function jsonResponse(payload: unknown, init: ResponseInit = {}) {
@@ -317,6 +318,87 @@ describe('Ima2Client', () => {
       n: 1,
       async: true,
       requestId: 'req_single',
+    });
+  });
+
+  it('posts async node-generate requests with externalSrc and parses the accepted response', async () => {
+    const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
+    const client = createIma2Client({
+      getBaseUrl: () => 'http://127.0.0.1:4567',
+      fetchImpl: async (input, init) => {
+        fetchCalls.push({ input, init });
+        return jsonResponse({ requestId: 'req_node', async: true }, { status: 202 });
+      },
+    });
+
+    await expect(
+      client.nodeGenerate({
+        prompt: 'turn this fox into stained glass',
+        provider: 'oauth',
+        model: 'gpt-5.4-mini',
+        size: '1024x1024',
+        externalSrc: 'source-fox.png',
+        requestId: 'req_node',
+      }),
+    ).resolves.toMatchObject({ requestId: 'req_node', async: true });
+
+    expect(fetchCalls).toHaveLength(1);
+    expect(String(fetchCalls[0].input)).toBe('http://127.0.0.1:4567/api/node/generate');
+    expect(fetchCalls[0].init?.method).toBe('POST');
+    expect(JSON.parse(String(fetchCalls[0].init?.body))).toMatchObject({
+      prompt: 'turn this fox into stained glass',
+      provider: 'oauth',
+      model: 'gpt-5.4-mini',
+      size: '1024x1024',
+      externalSrc: 'source-fox.png',
+      async: true,
+      requestId: 'req_node',
+    });
+  });
+
+  it('fetches node metadata from the encoded node path', async () => {
+    const fetchCalls: Array<RequestInfo | URL> = [];
+    const client = createIma2Client({
+      getBaseUrl: () => 'http://127.0.0.1:4567',
+      fetchImpl: async (input) => {
+        fetchCalls.push(input);
+        return jsonResponse({
+          nodeId: 'node/123',
+          url: '/generated/child.png',
+          meta: { prompt: 'child prompt' },
+        });
+      },
+    });
+
+    await expect(client.getNode('node/123')).resolves.toMatchObject({
+      nodeId: 'node/123',
+      url: '/generated/child.png',
+      meta: { prompt: 'child prompt' },
+    });
+    expect(fetchCalls.map(String)).toEqual([
+      'http://127.0.0.1:4567/api/node/node%2F123',
+    ]);
+  });
+
+  it('requires a filename in node-generate done event payloads', () => {
+    expect(() =>
+      nodeGenerateDoneEventPayloadSchema.parse({
+        requestId: 'req_node',
+        url: '/generated/child.png',
+      }),
+    ).toThrow(ZodError);
+
+    expect(
+      nodeGenerateDoneEventPayloadSchema.parse({
+        requestId: 'req_node',
+        filename: 'child.png',
+        url: '/generated/child.png',
+        nodeId: 'node_child',
+      }),
+    ).toMatchObject({
+      requestId: 'req_node',
+      filename: 'child.png',
+      nodeId: 'node_child',
     });
   });
 

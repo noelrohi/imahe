@@ -178,6 +178,8 @@ export function GalleryGrid({ pageSize = 24 }: GalleryGridProps) {
       <AssetDetailDialog
         asset={selectedAsset}
         open={selectedAsset !== null}
+        historyItems={assets}
+        onSelectAsset={setSelectedAsset}
         onOpenChange={(open) => {
           if (!open) {
             deleteMutation.reset();

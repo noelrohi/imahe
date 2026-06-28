@@ -10,6 +10,9 @@ import {
   ima2HealthSchema,
   inflightResponseSchema,
   multimodeRequestSchema,
+  nodeGenerateAsyncResponseSchema,
+  nodeGenerateRequestSchema,
+  nodeResponseSchema,
   oauthStatusResponseSchema,
   providersRuntimeResponseSchema,
   quotaResponseSchema,
@@ -26,6 +29,9 @@ import {
   type Ima2Health,
   type InflightResponse,
   type MultimodeRequest,
+  type NodeGenerateAsyncResponse,
+  type NodeGenerateRequest,
+  type NodeResponse,
   type OAuthStatusResponse,
   type ProvidersRuntimeResponse,
   type QuotaResponse,
@@ -44,6 +50,11 @@ export type GenerateParams = Omit<GenerateRequest, 'async' | 'requestId'> & {
 };
 
 export type MultimodeParams = Omit<MultimodeRequest, 'async' | 'requestId'> & {
+  async?: true;
+  requestId?: string;
+};
+
+export type NodeGenerateParams = Omit<NodeGenerateRequest, 'async' | 'requestId'> & {
   async?: true;
   requestId?: string;
 };
@@ -161,6 +172,23 @@ export class Ima2Client {
       method: 'POST',
       body: JSON.stringify(body),
     });
+  }
+
+  nodeGenerate(params: NodeGenerateParams): Promise<NodeGenerateAsyncResponse> {
+    const body = nodeGenerateRequestSchema.parse({
+      ...params,
+      async: true,
+      requestId: params.requestId ?? createRequestId(),
+    });
+
+    return this.request('/api/node/generate', nodeGenerateAsyncResponseSchema, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  getNode(nodeId: string): Promise<NodeResponse> {
+    return this.request(`/api/node/${encodeURIComponent(nodeId)}`, nodeResponseSchema);
   }
 
   inflight(params: InflightParams = {}): Promise<InflightResponse> {

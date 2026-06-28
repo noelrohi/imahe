@@ -42,7 +42,33 @@ export const multimodeRequestSchema = z
   })
   .passthrough();
 
+export const nodeGenerateRequestSchema = z
+  .object({
+    prompt: z.string(),
+    provider: generationProviderSchema,
+    model: z.string().optional(),
+    quality: z.string().optional(),
+    size: z.string().optional(),
+    format: z.string().optional(),
+    moderation: z.string().optional(),
+    references: z.array(z.string()).optional(),
+    externalSrc: z.string().optional(),
+    parentNodeId: z.string().optional(),
+    async: z.boolean().optional(),
+    requestId: z.string().optional(),
+    contextMode: z.string().optional(),
+    searchMode: z.string().optional(),
+  })
+  .passthrough();
+
 export const asyncGenerationResponseSchema = z
+  .object({
+    requestId: z.string(),
+    async: z.boolean().optional(),
+  })
+  .passthrough();
+
+export const nodeGenerateAsyncResponseSchema = z
   .object({
     requestId: z.string(),
     async: z.boolean().optional(),
@@ -121,10 +147,25 @@ export const sseDoneEventPayloadSchema = jobEventPayloadSchema({
   ok: z.boolean().optional(),
   image: z.string().optional(),
   filename: z.string().optional(),
+  url: z.string().optional(),
   images: z.array(z.unknown()).optional(),
   status: z.string().optional(),
+  nodeId: z.string().optional(),
+  parentNodeId: z.string().optional(),
+  createdAt: inflightTimestampSchema.optional(),
   sequenceId: z.string().optional(),
 });
+
+export const nodeGenerateDoneEventPayloadSchema = z
+  .object({
+    requestId: z.string(),
+    filename: z.string(),
+    url: z.string(),
+    nodeId: z.string().optional(),
+    parentNodeId: z.string().optional(),
+    createdAt: inflightTimestampSchema.optional(),
+  })
+  .passthrough();
 
 export const sseErrorEventPayloadSchema = jobEventPayloadSchema({
   error: z.union([z.string(), z.record(z.string(), z.unknown())]).optional(),
@@ -243,6 +284,14 @@ export const restoreAssetResponseSchema = z
   })
   .passthrough();
 
+export const nodeResponseSchema = z
+  .object({
+    nodeId: z.string(),
+    url: z.string(),
+    meta: z.record(z.string(), z.unknown()).optional(),
+  })
+  .passthrough();
+
 function jobEventPayloadSchema<T extends z.ZodRawShape>(shape: T) {
   return z
     .object({
@@ -261,7 +310,9 @@ export type AuthProvider = z.infer<typeof authProviderSchema>;
 export type GenerationProvider = z.infer<typeof generationProviderSchema>;
 export type GenerateRequest = z.infer<typeof generateRequestSchema>;
 export type MultimodeRequest = z.infer<typeof multimodeRequestSchema>;
+export type NodeGenerateRequest = z.infer<typeof nodeGenerateRequestSchema>;
 export type AsyncGenerationResponse = z.infer<typeof asyncGenerationResponseSchema>;
+export type NodeGenerateAsyncResponse = z.infer<typeof nodeGenerateAsyncResponseSchema>;
 export type InflightJob = z.infer<typeof inflightJobSchema>;
 export type TerminalInflightJob = z.infer<typeof terminalInflightJobSchema>;
 export type InflightResponse = z.infer<typeof inflightResponseSchema>;
@@ -271,6 +322,7 @@ export type SsePhaseEventPayload = z.infer<typeof ssePhaseEventPayloadSchema>;
 export type SsePartialEventPayload = z.infer<typeof ssePartialEventPayloadSchema>;
 export type SseImageEventPayload = z.infer<typeof sseImageEventPayloadSchema>;
 export type SseDoneEventPayload = z.infer<typeof sseDoneEventPayloadSchema>;
+export type NodeGenerateDoneEventPayload = z.infer<typeof nodeGenerateDoneEventPayloadSchema>;
 export type SseErrorEventPayload = z.infer<typeof sseErrorEventPayloadSchema>;
 export type SseReplayGapEventPayload = z.infer<typeof sseReplayGapEventPayloadSchema>;
 export type AuthSwitchResponse = z.infer<typeof authSwitchResponseSchema>;
@@ -284,3 +336,4 @@ export type HistoryItem = z.infer<typeof historyItemSchema>;
 export type HistoryResponse = z.infer<typeof historyResponseSchema>;
 export type DeleteAssetResponse = z.infer<typeof deleteAssetResponseSchema>;
 export type RestoreAssetResponse = z.infer<typeof restoreAssetResponseSchema>;
+export type NodeResponse = z.infer<typeof nodeResponseSchema>;

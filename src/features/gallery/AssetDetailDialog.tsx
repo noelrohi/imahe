@@ -1,6 +1,16 @@
-import type { ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { GitBranchIcon, ImagePlusIcon, SparklesIcon } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 
 import type { HistoryItem } from '@/lib/ima2/schemas';
+import type { AssetRecord } from '@/shared/ipc';
+import { useGenerate, type UiGenerationProvider } from '@/features/generate/hooks';
+import {
+  apiProviderToUiProvider,
+  lineageQueryKeys,
+  useRemix,
+} from '@/features/remix/useRemix';
+import { assetUrlsToBase64References } from '@/features/remix/references';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -11,16 +21,33 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupTextarea,
+} from '@/components/ui/input-group';
+import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 
 import { formatCreatedAt, getAssetTitle, isVideoAsset } from './assetMetadata';
 import { useAssetUrl } from './useAssetUrl';
+
+const DEFAULT_IMAGE_SIZE = '1024x1024';
+const DEFAULT_VARIANT_COUNT = 3;
+
+const DEFAULT_MODEL_BY_PROVIDER: Record<UiGenerationProvider, string> = {
+  codex: 'gpt-5.4-mini',
+  grok: 'grok-imagine-image',
+};
 
 type AssetDetailDialogProps = {
   asset: HistoryItem | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onDelete: (asset: HistoryItem) => void;
+  onSelectAsset?: (asset: HistoryItem) => void;
+  historyItems?: HistoryItem[];
   isDeleting?: boolean;
   deleteError?: string | null;
 };
@@ -30,16 +57,101 @@ export function AssetDetailDialog({
   open,
   onOpenChange,
   onDelete,
+  onSelectAsset,
+  historyItems = [],
   isDeleting = false,
   deleteError = null,
 }: AssetDetailDialogProps) {
   const fullAssetUrl = useAssetUrl(asset?.url);
+  const remixMutation = useRemix();
+  const variantsMutation = useGenerate();
+  const [actionPrompt, setActionPrompt] = useState('');
+  const [localActionError, setLocalActionError] = useState<string | null>(null);
+  const assetFilename = asset?.filename ?? '';
+
+  const assetRecordQuery = useQuery({
+    queryKey: lineageQueryKeys.asset(assetFilename),
+    queryFn: () => window.imahe.store.assets.get(assetFilename),
+    enabled: open && assetFilename.length > 0,
+  });
+  const childrenQuery = useQuery({
+    queryKey: lineageQueryKeys.children(assetFilename),
+    queryFn: () => window.imahe.store.assets.getChildren(assetFilename),
+    enabled: open && assetFilename.length > 0,
+  });
+
+  useEffect(() => {
+    setActionPrompt(asset?.prompt ?? '');
+    setLocalActionError(null);
+  }, [asset?.filename, asset?.prompt]);
+
+  const historyByFilename = useMemo(() => {
+    const nextHistoryByFilename = new Map<string, HistoryItem>();
+
+    for (const item of historyItems) {
+      nextHistoryByFilename.set(item.filename, item);
+    }
+
+    if (asset) {
+      nextHistoryByFilename.set(asset.filename, asset);
+    }
+
+    return nextHistoryByFilename;
+  }, [asset, historyItems]);
 
   if (!asset) {
     return null;
   }
 
   const title = getAssetTitle(asset);
+  const sourceProvider = apiProviderToUiProvider(asset.provider);
+  const sourceModel = asset.model ?? DEFAULT_MODEL_BY_PROVIDER[sourceProvider];
+  const actionPromptBlank = actionPrompt.trim().length === 0;
+  const actionDisabled = actionPromptBlank || remixMutation.isPending || variantsMutation.isPending;
+  const currentRecord = assetRecordQuery.data ?? null;
+  const children = childrenQuery.data ?? [];
+  const parentId = currentRecord?.parentId ?? null;
+  const actionErrorMessage =
+    localActionError ??
+    (remixMutation.error ? errorToMessage(remixMutation.error) : null) ??
+    (variantsMutation.error ? errorToMessage(variantsMutation.error) : null);
+
+  const handleRemix = () => {
+    if (actionDisabled) {
+      return;
+    }
+
+    setLocalActionError(null);
+
+    void remixMutation
+      .mutateAsync({
+        source: asset,
+        prompt: actionPrompt,
+        provider: sourceProvider,
+        model: sourceModel,
+        size: DEFAULT_IMAGE_SIZE,
+        quality: 'medium',
+        format: 'png',
+        moderation: 'low',
+      })
+      .catch((error) => setLocalActionError(errorToMessage(error)));
+  };
+
+  const handleMakeVariants = () => {
+    if (actionDisabled) {
+      return;
+    }
+
+    setLocalActionError(null);
+
+    void createVariantsFromSource({
+      asset,
+      prompt: actionPrompt,
+      provider: sourceProvider,
+      model: sourceModel,
+      mutateAsync: variantsMutation.mutateAsync,
+    }).catch((error) => setLocalActionError(errorToMessage(error)));
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -52,30 +164,98 @@ export function AssetDetailDialog({
         </DialogHeader>
 
         <div className="min-h-0 flex-1 overflow-auto bg-muted/30 p-4">
-          <div className="flex min-h-full items-center justify-center rounded-lg bg-background p-2">
-            {fullAssetUrl ? (
-              isVideoAsset(asset) ? (
-                <video
-                  src={fullAssetUrl}
-                  controls
-                  className="max-h-[calc(100vh-14rem)] max-w-full rounded-md"
-                >
-                  <track kind="captions" />
-                </video>
+          <div className="grid min-h-full gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
+            <div className="flex min-h-[24rem] items-center justify-center rounded-lg bg-background p-2">
+              {fullAssetUrl ? (
+                isVideoAsset(asset) ? (
+                  <video
+                    src={fullAssetUrl}
+                    controls
+                    className="max-h-[calc(100vh-14rem)] max-w-full rounded-md"
+                  >
+                    <track kind="captions" />
+                  </video>
+                ) : (
+                  <img
+                    src={fullAssetUrl}
+                    alt={title}
+                    className="max-h-[calc(100vh-14rem)] max-w-full rounded-md object-contain"
+                  />
+                )
               ) : (
-                <img
-                  src={fullAssetUrl}
-                  alt={title}
-                  className="max-h-[calc(100vh-14rem)] max-w-full rounded-md object-contain"
-                />
-              )
-            ) : (
-              <Skeleton className="h-[min(60vh,36rem)] w-full max-w-4xl" />
-            )}
+                <Skeleton className="h-[min(60vh,36rem)] w-full max-w-4xl" />
+              )}
+            </div>
+
+            <LineagePanel
+              parentId={parentId}
+              children={children}
+              historyByFilename={historyByFilename}
+              isLoading={assetRecordQuery.isPending || childrenQuery.isPending}
+              onSelectAsset={onSelectAsset}
+            />
           </div>
         </div>
 
-        <div className="flex flex-col gap-3 border-t p-4">
+        <div className="flex flex-col gap-4 border-t p-4">
+          <form
+            aria-label="Create from this image"
+            className="flex flex-col gap-3"
+            onSubmit={(event) => event.preventDefault()}
+          >
+            <div className="flex flex-col gap-1">
+              <h2 className="text-sm font-semibold">Create from this image</h2>
+              <p className="text-xs text-muted-foreground">
+                Remix uses this asset as externalSrc; variants attach it as a reference.
+              </p>
+            </div>
+            <InputGroup className="h-auto items-stretch overflow-hidden bg-background">
+              <InputGroupTextarea
+                aria-label="Remix prompt"
+                className="min-h-20 px-3 py-2"
+                placeholder="Describe how to transform or vary this image…"
+                value={actionPrompt}
+                onChange={(event) => setActionPrompt(event.target.value)}
+              />
+              <InputGroupAddon
+                align="block-end"
+                className="flex-wrap justify-between gap-2 border-t bg-muted/20"
+              >
+                <span className="text-xs text-muted-foreground">
+                  {sourceProvider === 'grok' ? 'Grok' : 'Codex/OpenAI'} · {sourceModel}
+                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <InputGroupButton
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={actionDisabled}
+                    onClick={handleMakeVariants}
+                  >
+                    <ImagePlusIcon data-icon="inline-start" />
+                    {variantsMutation.isPending ? 'Making variants…' : 'Make variants'}
+                  </InputGroupButton>
+                  <InputGroupButton
+                    type="button"
+                    size="sm"
+                    disabled={actionDisabled}
+                    onClick={handleRemix}
+                  >
+                    <SparklesIcon data-icon="inline-start" />
+                    {remixMutation.isPending ? 'Remixing…' : 'Remix'}
+                  </InputGroupButton>
+                </div>
+              </InputGroupAddon>
+            </InputGroup>
+            {actionErrorMessage ? (
+              <p role="alert" className="text-sm text-destructive">
+                {actionErrorMessage}
+              </p>
+            ) : null}
+          </form>
+
+          <Separator />
+
           <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
             <MetadataItem label="Created" value={formatCreatedAt(asset.createdAt)} />
             <MetadataItem label="Media" value={asset.mediaType ?? 'Unknown'} />
@@ -112,6 +292,188 @@ export function AssetDetailDialog({
   );
 }
 
+type CreateVariantsInput = {
+  asset: HistoryItem;
+  prompt: string;
+  provider: UiGenerationProvider;
+  model: string;
+  mutateAsync: ReturnType<typeof useGenerate>['mutateAsync'];
+};
+
+async function createVariantsFromSource({
+  asset,
+  prompt,
+  provider,
+  model,
+  mutateAsync,
+}: CreateVariantsInput) {
+  const references = await assetUrlsToBase64References([asset.url], {
+    provider,
+    getBaseUrl: () => window.imahe.getSidecarBaseUrl(),
+  });
+
+  await mutateAsync({
+    prompt,
+    provider,
+    model,
+    count: DEFAULT_VARIANT_COUNT,
+    size: DEFAULT_IMAGE_SIZE,
+    quality: 'medium',
+    format: 'png',
+    moderation: 'low',
+    references,
+  });
+}
+
+type LineagePanelProps = {
+  parentId: string | null;
+  children: AssetRecord[];
+  historyByFilename: Map<string, HistoryItem>;
+  isLoading: boolean;
+  onSelectAsset?: (asset: HistoryItem) => void;
+};
+
+function LineagePanel({
+  parentId,
+  children,
+  historyByFilename,
+  isLoading,
+  onSelectAsset,
+}: LineagePanelProps) {
+  const parentEntries = parentId
+    ? [{ id: parentId, asset: historyByFilename.get(parentId) ?? null }]
+    : [];
+  const childEntries = children.map((child) => ({
+    id: child.id,
+    asset: historyByFilename.get(child.id) ?? null,
+  }));
+
+  return (
+    <aside className="flex min-h-0 flex-col gap-4 rounded-lg border bg-background p-3">
+      <div className="flex items-start gap-2">
+        <GitBranchIcon className="mt-0.5 text-muted-foreground" data-icon="inline-start" />
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold">Lineage</h2>
+          <p className="text-xs text-muted-foreground">
+            Parent and remixes recorded in the local imahe store.
+          </p>
+        </div>
+      </div>
+
+      {isLoading ? (
+        <div className="flex flex-col gap-3">
+          <Skeleton className="h-16 w-full" />
+          <Skeleton className="h-16 w-full" />
+        </div>
+      ) : (
+        <div className="flex min-h-0 flex-col gap-4 overflow-auto">
+          <LineageList
+            title="Parent"
+            emptyText="No parent recorded."
+            entries={parentEntries}
+            onSelectAsset={onSelectAsset}
+          />
+          <Separator />
+          <LineageList
+            title={`Remixes (${childEntries.length})`}
+            emptyText="No remixes yet."
+            entries={childEntries}
+            onSelectAsset={onSelectAsset}
+          />
+        </div>
+      )}
+    </aside>
+  );
+}
+
+type LineageEntry = {
+  id: string;
+  asset: HistoryItem | null;
+};
+
+type LineageListProps = {
+  title: string;
+  emptyText: string;
+  entries: LineageEntry[];
+  onSelectAsset?: (asset: HistoryItem) => void;
+};
+
+function LineageList({ title, emptyText, entries, onSelectAsset }: LineageListProps) {
+  return (
+    <section aria-label={title} className="flex flex-col gap-2">
+      <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        {title}
+      </h3>
+      {entries.length === 0 ? (
+        <p className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+          {emptyText}
+        </p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {entries.map((entry) => (
+            <LineageAssetItem
+              key={entry.id}
+              entry={entry}
+              onSelectAsset={onSelectAsset}
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+type LineageAssetItemProps = {
+  entry: LineageEntry;
+  onSelectAsset?: (asset: HistoryItem) => void;
+};
+
+function LineageAssetItem({ entry, onSelectAsset }: LineageAssetItemProps) {
+  const assetUrl = useAssetUrl(entry.asset?.thumb ?? entry.asset?.url);
+
+  if (!entry.asset) {
+    return (
+      <div className="flex items-center gap-3 rounded-md border border-dashed p-2 text-xs text-muted-foreground">
+        <div className="flex size-12 items-center justify-center rounded bg-muted">
+          Missing
+        </div>
+        <div className="min-w-0">
+          <p className="font-medium text-foreground">Missing asset</p>
+          <p className="truncate">{entry.id}</p>
+        </div>
+      </div>
+    );
+  }
+
+  const title = getAssetTitle(entry.asset);
+
+  return (
+    <button
+      type="button"
+      className="flex min-w-0 items-center gap-3 rounded-md border p-2 text-left transition-colors hover:bg-muted/50 disabled:cursor-default disabled:hover:bg-transparent"
+      disabled={!onSelectAsset}
+      onClick={() => onSelectAsset?.(entry.asset as HistoryItem)}
+    >
+      {assetUrl ? (
+        <img
+          src={assetUrl}
+          alt={title}
+          className="size-12 rounded object-cover"
+        />
+      ) : (
+        <Skeleton className="size-12" />
+      )}
+      <div className="min-w-0 text-xs">
+        <p className="truncate font-medium">{title}</p>
+        <p className="truncate text-muted-foreground">{entry.asset.filename}</p>
+        <p className="truncate text-muted-foreground">
+          {formatCreatedAt(entry.asset.createdAt)}
+        </p>
+      </div>
+    </button>
+  );
+}
+
 type MetadataItemProps = {
   label: string;
   value: ReactNode;
@@ -128,4 +490,8 @@ function MetadataItem({ label, value }: MetadataItemProps) {
       <dd className="truncate text-foreground">{value}</dd>
     </div>
   );
+}
+
+function errorToMessage(error: unknown) {
+  return error instanceof Error ? error.message : 'Generation failed.';
 }
