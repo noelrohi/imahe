@@ -4,12 +4,20 @@ import { MakerZIP } from '@electron-forge/maker-zip';
 import { MakerDeb } from '@electron-forge/maker-deb';
 import { MakerRpm } from '@electron-forge/maker-rpm';
 import { VitePlugin } from '@electron-forge/plugin-vite';
+import { AutoUnpackNativesPlugin } from '@electron-forge/plugin-auto-unpack-natives';
 import { FusesPlugin } from '@electron-forge/plugin-fuses';
 import { FuseV1Options, FuseVersion } from '@electron/fuses';
 
 const config: ForgeConfig = {
   packagerConfig: {
-    asar: true,
+    asar: {
+      // ima2-gen is a Node CLI sidecar that must remain readable by the
+      // spawned Electron-as-Node process. Its native transitive dependencies
+      // are unpacked explicitly; AutoUnpackNativesPlugin covers any additional
+      // native modules Electron Forge detects during packaging.
+      unpack:
+        '{node_modules/ima2-gen/**,node_modules/better-sqlite3/**,node_modules/sharp/**,node_modules/@img/**}',
+    },
   },
   rebuildConfig: {},
   makers: [
@@ -19,6 +27,7 @@ const config: ForgeConfig = {
     new MakerDeb({}),
   ],
   plugins: [
+    new AutoUnpackNativesPlugin({}),
     new VitePlugin({
       // `build` can specify multiple entry builds, which can be Main process, Preload scripts, Worker process, etc.
       // If you are familiar with Vite configuration, it will look really familiar.
@@ -46,7 +55,7 @@ const config: ForgeConfig = {
     // at package time, before code signing the application
     new FusesPlugin({
       version: FuseVersion.V1,
-      [FuseV1Options.RunAsNode]: false,
+      [FuseV1Options.RunAsNode]: true,
       [FuseV1Options.EnableCookieEncryption]: true,
       [FuseV1Options.EnableNodeOptionsEnvironmentVariable]: false,
       [FuseV1Options.EnableNodeCliInspectArguments]: false,
