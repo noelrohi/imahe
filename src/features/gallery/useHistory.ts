@@ -6,18 +6,20 @@ import type { HistoryCursor } from '@/lib/ima2/schemas';
 export const historyQueryKey = ['history'] as const;
 
 export type UseHistoryOptions = {
+  favoritesOnly?: boolean;
   limit?: number;
 };
 
-export function useHistory({ limit = 24 }: UseHistoryOptions = {}) {
+export function useHistory({ favoritesOnly = false, limit = 24 }: UseHistoryOptions = {}) {
   return useInfiniteQuery({
-    queryKey: [...historyQueryKey, { limit }] as const,
+    queryKey: [...historyQueryKey, { favoritesOnly, limit }] as const,
     initialPageParam: undefined as HistoryCursor | undefined,
     queryFn: ({ pageParam }) =>
       ima2Client.history({
         limit,
         before: pageParam?.before,
         beforeFilename: pageParam?.beforeFilename,
+        ...(favoritesOnly ? { favoritesOnly: true } : {}),
       }),
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
   });

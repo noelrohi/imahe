@@ -243,6 +243,12 @@ export const restoreAssetResponseSchema = z
   })
   .passthrough();
 
+export const favoriteResponseSchema = z
+  .object({
+    isFavorite: z.boolean(),
+  })
+  .passthrough();
+
 function jobEventPayloadSchema<T extends z.ZodRawShape>(shape: T) {
   return z
     .object({
@@ -284,3 +290,4 @@ export type HistoryItem = z.infer<typeof historyItemSchema>;
 export type HistoryResponse = z.infer<typeof historyResponseSchema>;
 export type DeleteAssetResponse = z.infer<typeof deleteAssetResponseSchema>;
 export type RestoreAssetResponse = z.infer<typeof restoreAssetResponseSchema>;
+export type FavoriteResponse = z.infer<typeof favoriteResponseSchema>;
