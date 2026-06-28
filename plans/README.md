@@ -15,6 +15,12 @@ This is a **greenfield build-out**, not an audit. Plans turn the agreed design i
 | 003  | imahe SQLite store: schema, migrations, asar.unpack, IPC data layer | P1 | M | 001, 002 | DONE (cc0931b) |
 | 004  | App shell + shadcn sidebar navigation | P1 | S | 001 | DONE (dc35dd9) |
 | 005  | Tech-stack foundation: migrate to TanStack Router (file-based) + TanStack Query + Zod ima2 client | P1 | M | 004 | TODO |
+| 006  | Auth: Settings screen with device-code OAuth (Codex/OpenAI + Grok) | P1 | M | 005 | TODO |
+| 007  | Gallery: "see all" paginated grid + fullscreen detail from /api/history | P1 | M | 005 | TODO |
+| 008  | Prompt bar: generate + variants with async SSE progress | P1 | L | 006, 007 | TODO |
+| 009  | Remix + lineage: generate from a source, record parentage, show tree | P2 | L | 003, 007, 008 | TODO |
+| 010  | Canvas / inpaint: mask editor → blocking /api/edit | P2 | L | 003, 007, 008 | TODO |
+| 011  | Collections + ima2-owned favorites | P2 | M | 003, 007 | TODO |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (one-line reason) | REJECTED (one-line rationale)
 
@@ -24,7 +30,14 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED (one-line reason) | REJECTED 
 - **002 should land before 003**. The sidecar and store are conceptually separate, but both touch `package.json`, `forge.config.ts`, `src/main.ts`, `src/preload.ts`, `src/shared/ipc.ts`, and `src/global.d.ts`; serialize them to avoid merge-conflict-prone integration work.
 - **004 depends only on 001** but touches `package.json`/`bun.lock` for the router. It can run after 001 on a separate branch, but rebase before merging if 002/003 changed dependencies.
 - **005 must land before all feature plans**. It replaces react-router with TanStack Router and adds the TanStack Query + Zod `ima2` client that every feature view consumes. ADR 0004.
-- Feature plans (006 auth, 007 gallery, 008 generate/variants, 009 remix/lineage, 010 canvas, 011 collections) are **not yet written** — they will be authored after 005 lands, so they cite the real router/Query/client patterns. See `CONTEXT.md` → "UI shape", "Tech stack", and "Scope decisions".
+- **006 and 007 are parallel** after 005 (auth and gallery are independent).
+- **008 needs both 006 and 007** — provider auth/status gates generation (006), and generated results land in the gallery (007). It builds the async + `/api/events` SSE job machinery that 009 reuses.
+- **009 (remix/lineage)** reuses 008's async job machinery, 007's detail dialog, and 003's store (`assets.upsert({parentId})` / `getChildren` — no schema change). Remix uses `/api/node/generate` async; `/api/edit` is not async in the pinned ima2 version.
+- **010 (canvas)** depends on 003 for lineage, 007 for the detail/source asset entry point, and 008 for shared client/cancel conventions. It uses blocking `/api/edit` with local pending state; no SSE progress unless ima2 adds async edit later.
+- **011 (collections + favorites)** uses 003's existing store bridge for collections and 007's grid/history rows for renderable assets. Favorites ownership is resolved: ima2 owns favorites via `/api/history/favorite` + `X-Ima2-Browser-Id`; do not wire new UI to the SQLite `favorite` column.
+- **Feature plans 006–011 were written before 005 was committed** — each is stamped against `afad6d1` with a note to re-baseline its drift check to its dependency's actual SHA once that lands. They cite the *intended* 005 patterns (the `ima2` client, Query hooks, file-based routes); confirm those exist before executing.
+
+> **Cross-cutting note for executors**: every feature plan adds methods to the single `src/lib/ima2/client.ts` + `schemas.ts` and follows ADR 0004 (`.passthrough()` Zod, assert only read fields, no raw `fetch` in feature code, never hardcode the sidecar port). UI provider `codex` maps to ima2 generation provider `oauth`; `grok` maps to `grok`. New shadcn components are added via the `shadcn` skill. If renderer `fetch`/`EventSource` to `http://127.0.0.1:<port>` is blocked by CORS/CSP, STOP and choose a cross-cutting proxy/custom-protocol approach; do not disable Electron `webSecurity` in a feature plan.
 
 ## Findings considered and rejected
 
@@ -33,5 +46,6 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED (one-line reason) | REJECTED 
 
 ## Open verification tasks (carry into later plans)
 
-- **Favorites ownership** — `ima2 ls --favorites` suggests ima2 may track favorites server-side. Verify against ima2's `docs/API.md` or a live server before plan 011; if confirmed, the imahe store owns collections + lineage only, not favorites.
-- **Exact request/response field shapes** per ima2 endpoint — verify against `docs/API.md` or a live `ima2 serve` when wiring each call (plans 006–011). Endpoint *paths* in this repo's docs are reliable; field names are not yet confirmed. Per ADR 0004, each endpoint gets a `.passthrough()` Zod schema asserting only read fields until confirmed.
+- **Renderer sidecar connectivity** — plan 005's client smoke must prove renderer `fetch` can call `/api/health`; plan 008 must prove renderer `EventSource` can call `/api/events`. If CORS/CSP blocks either, stop and solve centrally (main-process proxy/custom protocol), not in individual features.
+- **Exact request/response field shapes** per ima2 endpoint — verify against `node_modules/ima2-gen/docs/API.md` or a live `ima2 serve` when wiring each call (plans 006–011). Endpoint paths and several key fields have been reconciled against the pinned dependency, but schemas should still use `.passthrough()` and assert only fields the UI reads.
+- **Favorites ownership resolved** — pinned ima2 owns favorites (`POST /api/history/favorite`, `favoritesOnly`, `isFavorite` with `X-Ima2-Browser-Id`). Plan 011 must use ima2 for favorites and leave the SQLite `favorite` column unused/deprecated.
