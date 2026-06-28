@@ -1,21 +1,31 @@
 import {
+  asyncGenerationResponseSchema,
   authStatusResponseSchema,
   authSwitchResponseSchema,
+  cancelJobResponseSchema,
   deleteAssetResponseSchema,
+  generateRequestSchema,
   grokStatusResponseSchema,
   historyResponseSchema,
   ima2HealthSchema,
+  inflightResponseSchema,
+  multimodeRequestSchema,
   oauthStatusResponseSchema,
   providersRuntimeResponseSchema,
   quotaResponseSchema,
   restoreAssetResponseSchema,
+  type AsyncGenerationResponse,
   type AuthProvider,
   type AuthStatusResponse,
   type AuthSwitchResponse,
+  type CancelJobResponse,
   type DeleteAssetResponse,
+  type GenerateRequest,
   type GrokStatusResponse,
   type HistoryResponse,
   type Ima2Health,
+  type InflightResponse,
+  type MultimodeRequest,
   type OAuthStatusResponse,
   type ProvidersRuntimeResponse,
   type QuotaResponse,
@@ -26,6 +36,22 @@ type FetchImpl = (input: RequestInfo | URL, init?: RequestInit) => Promise<Respo
 type GetBaseUrl = () => Promise<string | null> | string | null;
 type ResponseSchema<T> = {
   parse: (payload: unknown) => T;
+};
+
+export type GenerateParams = Omit<GenerateRequest, 'async' | 'requestId'> & {
+  async?: true;
+  requestId?: string;
+};
+
+export type MultimodeParams = Omit<MultimodeRequest, 'async' | 'requestId'> & {
+  async?: true;
+  requestId?: string;
+};
+
+export type InflightParams = {
+  includeTerminal?: boolean;
+  kind?: string;
+  sessionId?: string;
 };
 
 export type HistoryParams = {
@@ -111,6 +137,44 @@ export class Ima2Client {
     return this.request('/api/providers', providersRuntimeResponseSchema);
   }
 
+  generate(params: GenerateParams): Promise<AsyncGenerationResponse> {
+    const body = generateRequestSchema.parse({
+      ...params,
+      async: true,
+      requestId: params.requestId ?? createRequestId(),
+    });
+
+    return this.request('/api/generate', asyncGenerationResponseSchema, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  multimode(params: MultimodeParams): Promise<AsyncGenerationResponse> {
+    const body = multimodeRequestSchema.parse({
+      ...params,
+      async: true,
+      requestId: params.requestId ?? createRequestId(),
+    });
+
+    return this.request('/api/generate/multimode', asyncGenerationResponseSchema, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  inflight(params: InflightParams = {}): Promise<InflightResponse> {
+    return this.request(buildInflightPath(params), inflightResponseSchema);
+  }
+
+  cancelJob(requestId: string): Promise<CancelJobResponse> {
+    return this.request(
+      `/api/inflight/${encodeURIComponent(requestId)}`,
+      cancelJobResponseSchema,
+      { method: 'DELETE' },
+    );
+  }
+
   history(params: HistoryParams = {}): Promise<HistoryResponse> {
     return this.request(buildHistoryPath(params), historyResponseSchema);
   }
@@ -185,6 +249,20 @@ function getWindowSidecarBaseUrl(): Promise<string | null> {
   return window.imahe.getSidecarBaseUrl();
 }
 
+function buildInflightPath(params: InflightParams) {
+  const searchParams = new URLSearchParams();
+
+  appendSearchParam(searchParams, 'kind', params.kind);
+  appendSearchParam(searchParams, 'sessionId', params.sessionId);
+
+  if (params.includeTerminal !== undefined) {
+    searchParams.set('includeTerminal', params.includeTerminal ? '1' : '0');
+  }
+
+  const query = searchParams.toString();
+  return query ? `/api/inflight?${query}` : '/api/inflight';
+}
+
 function buildHistoryPath(params: HistoryParams) {
   const searchParams = new URLSearchParams();
 
@@ -212,6 +290,14 @@ function appendSearchParam(
   if (value !== undefined) {
     searchParams.set(key, String(value));
   }
+}
+
+function createRequestId() {
+  if (globalThis.crypto?.randomUUID) {
+    return `req_${globalThis.crypto.randomUUID()}`;
+  }
+
+  return `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`;
 }
 
 async function readErrorBody(response: Response): Promise<string | undefined> {

@@ -8,6 +8,146 @@ export const ima2HealthSchema = z
 
 export const authProviderSchema = z.enum(['codex', 'grok']);
 
+export const generationProviderSchema = z.enum(['oauth', 'grok']);
+
+export const generateRequestSchema = z
+  .object({
+    prompt: z.string(),
+    provider: generationProviderSchema,
+    model: z.string().optional(),
+    quality: z.string().optional(),
+    size: z.string().optional(),
+    format: z.string().optional(),
+    moderation: z.string().optional(),
+    n: z.number().int().positive().optional(),
+    references: z.array(z.string()).optional(),
+    async: z.boolean().optional(),
+    requestId: z.string().optional(),
+  })
+  .passthrough();
+
+export const multimodeRequestSchema = z
+  .object({
+    prompt: z.string(),
+    provider: generationProviderSchema,
+    model: z.string().optional(),
+    quality: z.string().optional(),
+    size: z.string().optional(),
+    format: z.string().optional(),
+    moderation: z.string().optional(),
+    maxImages: z.number().int().positive().optional(),
+    references: z.array(z.string()).optional(),
+    async: z.boolean().optional(),
+    requestId: z.string().optional(),
+  })
+  .passthrough();
+
+export const asyncGenerationResponseSchema = z
+  .object({
+    requestId: z.string(),
+    async: z.boolean().optional(),
+  })
+  .passthrough();
+
+const inflightTimestampSchema = z.union([z.number(), z.string()]);
+
+export const inflightJobSchema = z
+  .object({
+    requestId: z.string(),
+    kind: z.string().optional(),
+    prompt: z.string().optional(),
+    meta: z.record(z.string(), z.unknown()).optional(),
+    startedAt: inflightTimestampSchema.optional(),
+    phase: z.string().optional(),
+    phaseAt: inflightTimestampSchema.optional(),
+  })
+  .passthrough();
+
+export const terminalInflightJobSchema = inflightJobSchema
+  .extend({
+    status: z.string().optional(),
+    finishedAt: inflightTimestampSchema.optional(),
+    durationMs: z.number().optional(),
+    httpStatus: z.number().optional(),
+    errorCode: z.string().optional(),
+  })
+  .passthrough();
+
+export const inflightResponseSchema = z
+  .object({
+    jobs: z.array(inflightJobSchema),
+    terminalJobs: z.array(terminalInflightJobSchema).optional(),
+  })
+  .passthrough();
+
+export const cancelJobResponseSchema = z
+  .object({
+    requestId: z.string(),
+    active: z.boolean().optional(),
+    aborted: z.boolean().optional(),
+  })
+  .passthrough();
+
+export const ima2SseEventNameSchema = z.enum([
+  'phase',
+  'partial',
+  'image',
+  'done',
+  'error',
+  'replay-gap',
+]);
+
+export const ssePhaseEventPayloadSchema = jobEventPayloadSchema({
+  phase: z.string().optional(),
+  sequenceId: z.string().optional(),
+  maxImages: z.number().optional(),
+});
+
+export const ssePartialEventPayloadSchema = jobEventPayloadSchema({
+  image: z.string().optional(),
+  index: z.number().optional(),
+  sequenceId: z.string().optional(),
+});
+
+export const sseImageEventPayloadSchema = jobEventPayloadSchema({
+  image: z.string().optional(),
+  filename: z.string().optional(),
+  createdAt: inflightTimestampSchema.optional(),
+  sequenceId: z.string().optional(),
+  sequenceIndex: z.number().optional(),
+});
+
+export const sseDoneEventPayloadSchema = jobEventPayloadSchema({
+  ok: z.boolean().optional(),
+  image: z.string().optional(),
+  filename: z.string().optional(),
+  images: z.array(z.unknown()).optional(),
+  status: z.string().optional(),
+  sequenceId: z.string().optional(),
+});
+
+export const sseErrorEventPayloadSchema = jobEventPayloadSchema({
+  error: z.union([z.string(), z.record(z.string(), z.unknown())]).optional(),
+  code: z.string().optional(),
+  status: z.union([z.number(), z.string()]).optional(),
+});
+
+export const sseReplayGapEventPayloadSchema = z
+  .object({
+    lastEventId: z.union([z.number(), z.string()]).optional(),
+    oldestAvailableId: z.union([z.number(), z.string(), z.null()]).optional(),
+  })
+  .passthrough();
+
+export const ima2SseEventPayloadSchemas = {
+  phase: ssePhaseEventPayloadSchema,
+  partial: ssePartialEventPayloadSchema,
+  image: sseImageEventPayloadSchema,
+  done: sseDoneEventPayloadSchema,
+  error: sseErrorEventPayloadSchema,
+  'replay-gap': sseReplayGapEventPayloadSchema,
+};
+
 export const authSwitchResponseSchema = z
   .object({
     sessionId: z.string(),
@@ -103,8 +243,36 @@ export const restoreAssetResponseSchema = z
   })
   .passthrough();
 
+function jobEventPayloadSchema<T extends z.ZodRawShape>(shape: T) {
+  return z
+    .object({
+      requestId: z.string().optional(),
+      jobId: z.string().optional(),
+      ...shape,
+    })
+    .passthrough()
+    .refine((payload) => Boolean(payload.requestId ?? payload.jobId), {
+      message: 'SSE job event is missing requestId/jobId.',
+    });
+}
+
 export type Ima2Health = z.infer<typeof ima2HealthSchema>;
 export type AuthProvider = z.infer<typeof authProviderSchema>;
+export type GenerationProvider = z.infer<typeof generationProviderSchema>;
+export type GenerateRequest = z.infer<typeof generateRequestSchema>;
+export type MultimodeRequest = z.infer<typeof multimodeRequestSchema>;
+export type AsyncGenerationResponse = z.infer<typeof asyncGenerationResponseSchema>;
+export type InflightJob = z.infer<typeof inflightJobSchema>;
+export type TerminalInflightJob = z.infer<typeof terminalInflightJobSchema>;
+export type InflightResponse = z.infer<typeof inflightResponseSchema>;
+export type CancelJobResponse = z.infer<typeof cancelJobResponseSchema>;
+export type Ima2SseEventName = z.infer<typeof ima2SseEventNameSchema>;
+export type SsePhaseEventPayload = z.infer<typeof ssePhaseEventPayloadSchema>;
+export type SsePartialEventPayload = z.infer<typeof ssePartialEventPayloadSchema>;
+export type SseImageEventPayload = z.infer<typeof sseImageEventPayloadSchema>;
+export type SseDoneEventPayload = z.infer<typeof sseDoneEventPayloadSchema>;
+export type SseErrorEventPayload = z.infer<typeof sseErrorEventPayloadSchema>;
+export type SseReplayGapEventPayload = z.infer<typeof sseReplayGapEventPayloadSchema>;
 export type AuthSwitchResponse = z.infer<typeof authSwitchResponseSchema>;
 export type AuthStatusResponse = z.infer<typeof authStatusResponseSchema>;
 export type OAuthStatusResponse = z.infer<typeof oauthStatusResponseSchema>;

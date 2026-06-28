@@ -283,4 +283,113 @@ describe('Ima2Client', () => {
     expect(fetchCalls[0].init?.method).toBe('POST');
     expect(fetchCalls[0].init?.body).toBe(JSON.stringify({ trashId: 'trash-123' }));
   });
+
+  it('posts async generate requests with n and parses the accepted response', async () => {
+    const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
+    const client = createIma2Client({
+      getBaseUrl: () => 'http://127.0.0.1:4567',
+      fetchImpl: async (input, init) => {
+        fetchCalls.push({ input, init });
+        return jsonResponse({ requestId: 'req_single', async: true }, { status: 202 });
+      },
+    });
+
+    await expect(
+      client.generate({
+        prompt: 'a moonlit heron',
+        provider: 'oauth',
+        model: 'gpt-5.4-mini',
+        size: '1024x1024',
+        n: 1,
+        references: [],
+        requestId: 'req_single',
+      }),
+    ).resolves.toMatchObject({ requestId: 'req_single', async: true });
+
+    expect(fetchCalls).toHaveLength(1);
+    expect(String(fetchCalls[0].input)).toBe('http://127.0.0.1:4567/api/generate');
+    expect(fetchCalls[0].init?.method).toBe('POST');
+    expect(JSON.parse(String(fetchCalls[0].init?.body))).toMatchObject({
+      prompt: 'a moonlit heron',
+      provider: 'oauth',
+      model: 'gpt-5.4-mini',
+      size: '1024x1024',
+      n: 1,
+      async: true,
+      requestId: 'req_single',
+    });
+  });
+
+  it('posts async multimode requests with maxImages and parses the accepted response', async () => {
+    const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
+    const client = createIma2Client({
+      getBaseUrl: () => 'http://127.0.0.1:4567',
+      fetchImpl: async (input, init) => {
+        fetchCalls.push({ input, init });
+        return jsonResponse({ requestId: 'req_variants' }, { status: 202 });
+      },
+    });
+
+    await expect(
+      client.multimode({
+        prompt: 'four toy robots',
+        provider: 'grok',
+        model: 'grok-imagine-image',
+        size: '1024x1024',
+        maxImages: 4,
+        references: [],
+        requestId: 'req_variants',
+      }),
+    ).resolves.toMatchObject({ requestId: 'req_variants' });
+
+    expect(fetchCalls).toHaveLength(1);
+    expect(String(fetchCalls[0].input)).toBe(
+      'http://127.0.0.1:4567/api/generate/multimode',
+    );
+    expect(fetchCalls[0].init?.method).toBe('POST');
+    expect(JSON.parse(String(fetchCalls[0].init?.body))).toMatchObject({
+      prompt: 'four toy robots',
+      provider: 'grok',
+      model: 'grok-imagine-image',
+      size: '1024x1024',
+      maxImages: 4,
+      async: true,
+      requestId: 'req_variants',
+    });
+  });
+
+  it('lists and cancels inflight jobs through the expected endpoints', async () => {
+    const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
+    const client = createIma2Client({
+      getBaseUrl: () => 'http://127.0.0.1:4567',
+      fetchImpl: async (input, init) => {
+        fetchCalls.push({ input, init });
+
+        if (String(input).includes('/api/inflight?')) {
+          return jsonResponse({
+            jobs: [{ requestId: 'req_active', phase: 'streaming' }],
+            terminalJobs: [{ requestId: 'req_done', status: 'completed' }],
+          });
+        }
+
+        return jsonResponse({ requestId: 'req_active', active: true, aborted: true });
+      },
+    });
+
+    await expect(client.inflight({ includeTerminal: true })).resolves.toMatchObject({
+      jobs: [{ requestId: 'req_active' }],
+      terminalJobs: [{ requestId: 'req_done' }],
+    });
+    await expect(client.cancelJob('req_active')).resolves.toMatchObject({
+      requestId: 'req_active',
+      active: true,
+      aborted: true,
+    });
+
+    expect(fetchCalls.map((call) => String(call.input))).toEqual([
+      'http://127.0.0.1:4567/api/inflight?includeTerminal=1',
+      'http://127.0.0.1:4567/api/inflight/req_active',
+    ]);
+    expect(fetchCalls[1].init?.method).toBe('DELETE');
+  });
 });
