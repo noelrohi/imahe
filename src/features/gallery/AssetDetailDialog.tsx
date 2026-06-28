@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import type { HistoryItem } from '@/lib/ima2/schemas';
 import type { AssetRecord } from '@/shared/ipc';
+import { CanvasEditorDialog } from '@/features/canvas/CanvasEditorDialog';
 import { useGenerate, type UiGenerationProvider } from '@/features/generate/hooks';
 import {
   apiProviderToUiProvider,
@@ -67,6 +68,7 @@ export function AssetDetailDialog({
   const variantsMutation = useGenerate();
   const [actionPrompt, setActionPrompt] = useState('');
   const [localActionError, setLocalActionError] = useState<string | null>(null);
+  const [canvasOpen, setCanvasOpen] = useState(false);
   const assetFilename = asset?.filename ?? '';
 
   const assetRecordQuery = useQuery({
@@ -84,6 +86,12 @@ export function AssetDetailDialog({
     setActionPrompt(asset?.prompt ?? '');
     setLocalActionError(null);
   }, [asset?.filename, asset?.prompt]);
+
+  useEffect(() => {
+    if (!open) {
+      setCanvasOpen(false);
+    }
+  }, [open]);
 
   const historyByFilename = useMemo(() => {
     const nextHistoryByFilename = new Map<string, HistoryItem>();
@@ -104,6 +112,8 @@ export function AssetDetailDialog({
   }
 
   const title = getAssetTitle(asset);
+  const assetIsVideo = isVideoAsset(asset);
+  const canvasUnavailable = assetIsVideo || !fullAssetUrl;
   const sourceProvider = apiProviderToUiProvider(asset.provider);
   const sourceModel = asset.model ?? DEFAULT_MODEL_BY_PROVIDER[sourceProvider];
   const actionPromptBlank = actionPrompt.trim().length === 0;
@@ -154,141 +164,160 @@ export function AssetDetailDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[calc(100vh-2rem)] max-h-[calc(100vh-2rem)] max-w-[calc(100vw-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[calc(100vw-2rem)]">
-        <DialogHeader className="border-b p-4 pr-14">
-          <DialogTitle className="truncate">{asset.filename}</DialogTitle>
-          <DialogDescription className="line-clamp-2">
-            {asset.prompt || 'Generated asset details'}
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="flex h-[calc(100vh-2rem)] max-h-[calc(100vh-2rem)] max-w-[calc(100vw-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[calc(100vw-2rem)]">
+          <DialogHeader className="border-b p-4 pr-14">
+            <DialogTitle className="truncate">{asset.filename}</DialogTitle>
+            <DialogDescription className="line-clamp-2">
+              {asset.prompt || 'Generated asset details'}
+            </DialogDescription>
+          </DialogHeader>
 
-        <div className="min-h-0 flex-1 overflow-auto bg-muted/30 p-4">
-          <div className="grid min-h-full gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
-            <div className="flex min-h-[24rem] items-center justify-center rounded-lg bg-background p-2">
-              {fullAssetUrl ? (
-                isVideoAsset(asset) ? (
-                  <video
-                    src={fullAssetUrl}
-                    controls
-                    className="max-h-[calc(100vh-14rem)] max-w-full rounded-md"
-                  >
-                    <track kind="captions" />
-                  </video>
+          <div className="min-h-0 flex-1 overflow-auto bg-muted/30 p-4">
+            <div className="grid min-h-full gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
+              <div className="flex min-h-[24rem] items-center justify-center rounded-lg bg-background p-2">
+                {fullAssetUrl ? (
+                  assetIsVideo ? (
+                    <video
+                      src={fullAssetUrl}
+                      controls
+                      className="max-h-[calc(100vh-14rem)] max-w-full rounded-md"
+                    >
+                      <track kind="captions" />
+                    </video>
+                  ) : (
+                    <img
+                      src={fullAssetUrl}
+                      alt={title}
+                      className="max-h-[calc(100vh-14rem)] max-w-full rounded-md object-contain"
+                    />
+                  )
                 ) : (
-                  <img
-                    src={fullAssetUrl}
-                    alt={title}
-                    className="max-h-[calc(100vh-14rem)] max-w-full rounded-md object-contain"
-                  />
-                )
-              ) : (
-                <Skeleton className="h-[min(60vh,36rem)] w-full max-w-4xl" />
-              )}
-            </div>
+                  <Skeleton className="h-[min(60vh,36rem)] w-full max-w-4xl" />
+                )}
+              </div>
 
-            <LineagePanel
-              parentId={parentId}
-              children={children}
-              historyByFilename={historyByFilename}
-              isLoading={assetRecordQuery.isPending || childrenQuery.isPending}
-              onSelectAsset={onSelectAsset}
-            />
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-4 border-t p-4">
-          <form
-            aria-label="Create from this image"
-            className="flex flex-col gap-3"
-            onSubmit={(event) => event.preventDefault()}
-          >
-            <div className="flex flex-col gap-1">
-              <h2 className="text-sm font-semibold">Create from this image</h2>
-              <p className="text-xs text-muted-foreground">
-                Remix uses this asset as externalSrc; variants attach it as a reference.
-              </p>
-            </div>
-            <InputGroup className="h-auto items-stretch overflow-hidden bg-background">
-              <InputGroupTextarea
-                aria-label="Remix prompt"
-                className="min-h-20 px-3 py-2"
-                placeholder="Describe how to transform or vary this image…"
-                value={actionPrompt}
-                onChange={(event) => setActionPrompt(event.target.value)}
+              <LineagePanel
+                parentId={parentId}
+                children={children}
+                historyByFilename={historyByFilename}
+                isLoading={assetRecordQuery.isPending || childrenQuery.isPending}
+                onSelectAsset={onSelectAsset}
               />
-              <InputGroupAddon
-                align="block-end"
-                className="flex-wrap justify-between gap-2 border-t bg-muted/20"
-              >
-                <span className="text-xs text-muted-foreground">
-                  {sourceProvider === 'grok' ? 'Grok' : 'Codex/OpenAI'} · {sourceModel}
-                </span>
-                <div className="flex flex-wrap items-center gap-2">
-                  <InputGroupButton
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={actionDisabled}
-                    onClick={handleMakeVariants}
-                  >
-                    <ImagePlusIcon data-icon="inline-start" />
-                    {variantsMutation.isPending ? 'Making variants…' : 'Make variants'}
-                  </InputGroupButton>
-                  <InputGroupButton
-                    type="button"
-                    size="sm"
-                    disabled={actionDisabled}
-                    onClick={handleRemix}
-                  >
-                    <SparklesIcon data-icon="inline-start" />
-                    {remixMutation.isPending ? 'Remixing…' : 'Remix'}
-                  </InputGroupButton>
-                </div>
-              </InputGroupAddon>
-            </InputGroup>
-            {actionErrorMessage ? (
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-4 border-t p-4">
+            <form
+              aria-label="Create from this image"
+              className="flex flex-col gap-3"
+              onSubmit={(event) => event.preventDefault()}
+            >
+              <div className="flex flex-col gap-1">
+                <h2 className="text-sm font-semibold">Create from this image</h2>
+                <p className="text-xs text-muted-foreground">
+                  Remix uses this asset as externalSrc; variants attach it as a reference.
+                </p>
+              </div>
+              <InputGroup className="h-auto items-stretch overflow-hidden bg-background">
+                <InputGroupTextarea
+                  aria-label="Remix prompt"
+                  className="min-h-20 px-3 py-2"
+                  placeholder="Describe how to transform or vary this image…"
+                  value={actionPrompt}
+                  onChange={(event) => setActionPrompt(event.target.value)}
+                />
+                <InputGroupAddon
+                  align="block-end"
+                  className="flex-wrap justify-between gap-2 border-t bg-muted/20"
+                >
+                  <span className="text-xs text-muted-foreground">
+                    {sourceProvider === 'grok' ? 'Grok' : 'Codex/OpenAI'} · {sourceModel}
+                  </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <InputGroupButton
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={actionDisabled}
+                      onClick={handleMakeVariants}
+                    >
+                      <ImagePlusIcon data-icon="inline-start" />
+                      {variantsMutation.isPending ? 'Making variants…' : 'Make variants'}
+                    </InputGroupButton>
+                    <InputGroupButton
+                      type="button"
+                      size="sm"
+                      disabled={actionDisabled}
+                      onClick={handleRemix}
+                    >
+                      <SparklesIcon data-icon="inline-start" />
+                      {remixMutation.isPending ? 'Remixing…' : 'Remix'}
+                    </InputGroupButton>
+                  </div>
+                </InputGroupAddon>
+              </InputGroup>
+              {actionErrorMessage ? (
+                <p role="alert" className="text-sm text-destructive">
+                  {actionErrorMessage}
+                </p>
+              ) : null}
+            </form>
+
+            <Separator />
+
+            <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+              <MetadataItem label="Created" value={formatCreatedAt(asset.createdAt)} />
+              <MetadataItem label="Media" value={asset.mediaType ?? 'Unknown'} />
+              <MetadataItem label="Provider" value={asset.provider} />
+              <MetadataItem label="Model" value={asset.model} />
+              <MetadataItem label="Session" value={asset.sessionId} />
+              <MetadataItem label="Request" value={asset.requestId} />
+              <MetadataItem label="Node" value={asset.nodeId} />
+              <MetadataItem
+                label="References"
+                value={asset.refsCount === undefined ? null : String(asset.refsCount)}
+              />
+            </dl>
+
+            {deleteError ? (
               <p role="alert" className="text-sm text-destructive">
-                {actionErrorMessage}
+                {deleteError}
               </p>
             ) : null}
-          </form>
+          </div>
 
-          <Separator />
-
-          <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
-            <MetadataItem label="Created" value={formatCreatedAt(asset.createdAt)} />
-            <MetadataItem label="Media" value={asset.mediaType ?? 'Unknown'} />
-            <MetadataItem label="Provider" value={asset.provider} />
-            <MetadataItem label="Model" value={asset.model} />
-            <MetadataItem label="Session" value={asset.sessionId} />
-            <MetadataItem label="Request" value={asset.requestId} />
-            <MetadataItem label="Node" value={asset.nodeId} />
-            <MetadataItem
-              label="References"
-              value={asset.refsCount === undefined ? null : String(asset.refsCount)}
-            />
-          </dl>
-
-          {deleteError ? (
-            <p role="alert" className="text-sm text-destructive">
-              {deleteError}
-            </p>
-          ) : null}
-        </div>
-
-        <DialogFooter className="mx-0 mb-0 rounded-none border-t bg-background">
-          <Button
-            type="button"
-            variant="destructive"
-            onClick={() => onDelete(asset)}
-            disabled={isDeleting}
-          >
-            {isDeleting ? 'Deleting…' : 'Delete'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          <DialogFooter className="mx-0 mb-0 rounded-none border-t bg-background sm:justify-between">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setCanvasOpen(true)}
+              disabled={canvasUnavailable}
+              title={assetIsVideo ? 'Canvas inpaint is available for images only.' : undefined}
+            >
+              Edit in Canvas
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => onDelete(asset)}
+              disabled={isDeleting}
+            >
+              {isDeleting ? 'Deleting…' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {canvasOpen ? (
+        <CanvasEditorDialog
+          asset={asset}
+          sourceUrl={fullAssetUrl}
+          open={canvasOpen}
+          onOpenChange={setCanvasOpen}
+        />
+      ) : null}
+    </>
   );
 }
 

@@ -4,6 +4,9 @@ import { describe, expect, it } from 'vitest';
 import { nodeGenerateDoneEventPayloadSchema } from './schemas';
 import { Ima2HttpError, createIma2Client } from './client';
 
+const PNG_DATA_URL =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=';
+
 function jsonResponse(payload: unknown, init: ResponseInit = {}) {
   return new Response(JSON.stringify(payload), {
     headers: { 'Content-Type': 'application/json' },
@@ -400,6 +403,56 @@ describe('Ima2Client', () => {
       filename: 'child.png',
       nodeId: 'node_child',
     });
+  });
+
+  it('posts blocking edit requests to /api/edit and parses the saved asset response', async () => {
+    const fetchCalls: Array<{ input: RequestInfo | URL; init?: RequestInit }> = [];
+    const client = createIma2Client({
+      getBaseUrl: () => 'http://127.0.0.1:4567',
+      fetchImpl: async (input, init) => {
+        fetchCalls.push({ input, init });
+        return jsonResponse({
+          filename: 'edited.png',
+          createdAt: 1_700_000_000_000,
+          image: PNG_DATA_URL,
+          provider: 'oauth',
+        });
+      },
+    });
+
+    await expect(
+      client.edit({
+        prompt: 'replace the sky',
+        image: PNG_DATA_URL,
+        mask: PNG_DATA_URL,
+        provider: 'oauth',
+        model: 'gpt-5.4-mini',
+        quality: 'medium',
+        size: '1024x1024',
+        moderation: 'low',
+        requestId: 'req_edit',
+      }),
+    ).resolves.toMatchObject({
+      filename: 'edited.png',
+      createdAt: 1_700_000_000_000,
+      provider: 'oauth',
+    });
+
+    expect(fetchCalls).toHaveLength(1);
+    expect(String(fetchCalls[0].input)).toBe('http://127.0.0.1:4567/api/edit');
+    expect(fetchCalls[0].init?.method).toBe('POST');
+    expect(JSON.parse(String(fetchCalls[0].init?.body))).toMatchObject({
+      prompt: 'replace the sky',
+      image: PNG_DATA_URL,
+      mask: PNG_DATA_URL,
+      provider: 'oauth',
+      model: 'gpt-5.4-mini',
+      quality: 'medium',
+      size: '1024x1024',
+      moderation: 'low',
+      requestId: 'req_edit',
+    });
+    expect(JSON.parse(String(fetchCalls[0].init?.body)).async).toBeUndefined();
   });
 
   it('posts async multimode requests with maxImages and parses the accepted response', async () => {

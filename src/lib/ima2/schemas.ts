@@ -10,6 +10,15 @@ export const authProviderSchema = z.enum(['codex', 'grok']);
 
 export const generationProviderSchema = z.enum(['oauth', 'grok']);
 
+export const editProviderSchema = z.literal('oauth');
+
+export const pngBase64OrDataUrlSchema = z
+  .string()
+  .min(1)
+  .refine(isPngBase64OrDataUrl, {
+    message: 'Expected PNG base64 or a data:image/png;base64 URL.',
+  });
+
 export const generateRequestSchema = z
   .object({
     prompt: z.string(),
@@ -58,6 +67,20 @@ export const nodeGenerateRequestSchema = z
     requestId: z.string().optional(),
     contextMode: z.string().optional(),
     searchMode: z.string().optional(),
+  })
+  .passthrough();
+
+export const editRequestSchema = z
+  .object({
+    prompt: z.string(),
+    image: pngBase64OrDataUrlSchema,
+    mask: pngBase64OrDataUrlSchema.optional(),
+    provider: editProviderSchema,
+    model: z.string().optional(),
+    quality: z.string().optional(),
+    size: z.string().optional(),
+    moderation: z.string().optional(),
+    requestId: z.string().optional(),
   })
   .passthrough();
 
@@ -111,6 +134,18 @@ export const cancelJobResponseSchema = z
     requestId: z.string(),
     active: z.boolean().optional(),
     aborted: z.boolean().optional(),
+  })
+  .passthrough();
+
+export const editResponseSchema = z
+  .object({
+    filename: z.string(),
+    createdAt: z.union([z.number(), z.string()]).optional(),
+    image: z.string().optional(),
+    url: z.string().optional(),
+    provider: z.string().optional(),
+    model: z.string().optional(),
+    revisedPrompt: z.union([z.string(), z.null()]).optional(),
   })
   .passthrough();
 
@@ -292,6 +327,58 @@ export const nodeResponseSchema = z
   })
   .passthrough();
 
+const PNG_DATA_URL_RE = /^data:image\/png;base64,/;
+const BASE64_RE = /^[A-Za-z0-9+/]+={0,2}$/;
+const PNG_SIGNATURE = [137, 80, 78, 71, 13, 10, 26, 10] as const;
+
+function isPngBase64OrDataUrl(value: string): boolean {
+  const trimmed = value.trim();
+  const payload = PNG_DATA_URL_RE.test(trimmed)
+    ? trimmed.replace(PNG_DATA_URL_RE, '')
+    : trimmed;
+
+  const compactPayload = payload.replace(/\s+/g, '');
+
+  return (
+    compactPayload.length > 0 &&
+    compactPayload.length % 4 === 0 &&
+    BASE64_RE.test(compactPayload) &&
+    hasPngSignature(compactPayload)
+  );
+}
+
+function hasPngSignature(base64Payload: string): boolean {
+  const signatureBytes = decodeBase64Prefix(base64Payload, 12);
+
+  return Boolean(
+    signatureBytes &&
+      PNG_SIGNATURE.every((byte, index) => signatureBytes[index] === byte),
+  );
+}
+
+function decodeBase64Prefix(base64Payload: string, chars: number): Uint8Array | null {
+  try {
+    const prefix = base64Payload.slice(0, chars);
+
+    if (typeof atob === 'function') {
+      const binary = atob(prefix);
+      return Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    }
+
+    const globalWithBuffer = globalThis as typeof globalThis & {
+      Buffer?: { from: (input: string, encoding: 'base64') => Uint8Array };
+    };
+
+    if (globalWithBuffer.Buffer) {
+      return globalWithBuffer.Buffer.from(prefix, 'base64');
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
 function jobEventPayloadSchema<T extends z.ZodRawShape>(shape: T) {
   return z
     .object({
@@ -308,15 +395,18 @@ function jobEventPayloadSchema<T extends z.ZodRawShape>(shape: T) {
 export type Ima2Health = z.infer<typeof ima2HealthSchema>;
 export type AuthProvider = z.infer<typeof authProviderSchema>;
 export type GenerationProvider = z.infer<typeof generationProviderSchema>;
+export type EditProvider = z.infer<typeof editProviderSchema>;
 export type GenerateRequest = z.infer<typeof generateRequestSchema>;
 export type MultimodeRequest = z.infer<typeof multimodeRequestSchema>;
 export type NodeGenerateRequest = z.infer<typeof nodeGenerateRequestSchema>;
+export type EditRequest = z.infer<typeof editRequestSchema>;
 export type AsyncGenerationResponse = z.infer<typeof asyncGenerationResponseSchema>;
 export type NodeGenerateAsyncResponse = z.infer<typeof nodeGenerateAsyncResponseSchema>;
 export type InflightJob = z.infer<typeof inflightJobSchema>;
 export type TerminalInflightJob = z.infer<typeof terminalInflightJobSchema>;
 export type InflightResponse = z.infer<typeof inflightResponseSchema>;
 export type CancelJobResponse = z.infer<typeof cancelJobResponseSchema>;
+export type EditResponse = z.infer<typeof editResponseSchema>;
 export type Ima2SseEventName = z.infer<typeof ima2SseEventNameSchema>;
 export type SsePhaseEventPayload = z.infer<typeof ssePhaseEventPayloadSchema>;
 export type SsePartialEventPayload = z.infer<typeof ssePartialEventPayloadSchema>;

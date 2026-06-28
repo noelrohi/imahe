@@ -4,6 +4,8 @@ import {
   authSwitchResponseSchema,
   cancelJobResponseSchema,
   deleteAssetResponseSchema,
+  editRequestSchema,
+  editResponseSchema,
   generateRequestSchema,
   grokStatusResponseSchema,
   historyResponseSchema,
@@ -23,6 +25,8 @@ import {
   type AuthSwitchResponse,
   type CancelJobResponse,
   type DeleteAssetResponse,
+  type EditRequest,
+  type EditResponse,
   type GenerateRequest,
   type GrokStatusResponse,
   type HistoryResponse,
@@ -56,6 +60,10 @@ export type MultimodeParams = Omit<MultimodeRequest, 'async' | 'requestId'> & {
 
 export type NodeGenerateParams = Omit<NodeGenerateRequest, 'async' | 'requestId'> & {
   async?: true;
+  requestId?: string;
+};
+
+export type EditParams = Omit<EditRequest, 'requestId'> & {
   requestId?: string;
 };
 
@@ -182,6 +190,18 @@ export class Ima2Client {
     });
 
     return this.request('/api/node/generate', nodeGenerateAsyncResponseSchema, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  }
+
+  edit(params: EditParams): Promise<EditResponse> {
+    const body = editRequestSchema.parse({
+      ...params,
+      requestId: params.requestId ?? createRequestId(),
+    });
+
+    return this.request('/api/edit', editResponseSchema, {
       method: 'POST',
       body: JSON.stringify(body),
     });
