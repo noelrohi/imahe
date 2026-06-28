@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
-import { ImageIcon, SparklesIcon } from 'lucide-react';
+import { ImageIcon, SparkleIcon } from '@phosphor-icons/react';
 
 import {
   useProviderStatuses,
@@ -243,7 +243,7 @@ export function PromptBar({
               {generateMutation.isPending ? (
                 <ImageIcon data-icon="inline-start" />
               ) : (
-                <SparklesIcon data-icon="inline-start" />
+                <SparkleIcon data-icon="inline-start" />
               )}
               {generateMutation.isPending ? 'Submitting…' : submitLabel}
             </InputGroupButton>

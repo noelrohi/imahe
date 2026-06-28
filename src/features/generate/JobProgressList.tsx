@@ -1,4 +1,4 @@
-import { XIcon } from 'lucide-react';
+import { XIcon } from '@phosphor-icons/react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';

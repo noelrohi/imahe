@@ -1,5 +1,5 @@
 import { Link, useRouterState } from '@tanstack/react-router';
-import { FolderIcon, HomeIcon, SettingsIcon } from 'lucide-react';
+import { FolderIcon, GearIcon, HouseIcon } from '@phosphor-icons/react';
 
 import {
   Sidebar,
@@ -14,8 +14,8 @@ import {
 } from '@/components/ui/sidebar';
 
 const navigationItems = [
-  { title: 'Home', to: '/', icon: HomeIcon },
-  { title: 'Settings', to: '/settings', icon: SettingsIcon },
+  { title: 'Home', to: '/', icon: HouseIcon },
+  { title: 'Settings', to: '/settings', icon: GearIcon },
   { title: 'Collections', to: '/collections', icon: FolderIcon },
 ] as const;
 

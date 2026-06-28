@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
-import { EraserIcon, PaintbrushIcon, RotateCcwIcon, SparklesIcon, XIcon } from 'lucide-react';
+import {
+  ArrowCounterClockwiseIcon,
+  EraserIcon,
+  PaintBrushIcon,
+  SparkleIcon,
+  XIcon,
+} from '@phosphor-icons/react';
 
 import type { HistoryItem } from '@/lib/ima2/schemas';
 import { Badge } from '@/components/ui/badge';
@@ -491,7 +497,7 @@ export function CanvasEditor({
                 onClick={() => setTool('brush')}
                 disabled={isSubmitting}
               >
-                <PaintbrushIcon data-icon="inline-start" />
+                <PaintBrushIcon data-icon="inline-start" />
                 Brush
               </Button>
               <Button
@@ -505,7 +511,7 @@ export function CanvasEditor({
                 Eraser
               </Button>
               <Button type="button" variant="ghost" size="sm" onClick={handleClearMask} disabled={isSubmitting}>
-                <RotateCcwIcon data-icon="inline-start" />
+                <ArrowCounterClockwiseIcon data-icon="inline-start" />
                 Clear
               </Button>
             </div>
@@ -549,7 +555,7 @@ export function CanvasEditor({
               </Button>
             ) : null}
             <Button type="submit" disabled={submitDisabled}>
-              <SparklesIcon data-icon="inline-start" />
+              <SparkleIcon data-icon="inline-start" />
               {isSubmitting ? 'Inpainting…' : 'Inpaint masked area'}
             </Button>
           </div>

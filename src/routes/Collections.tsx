@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import { FolderIcon, ImageOffIcon, PlusIcon } from 'lucide-react';
+import { FolderIcon, ImageBrokenIcon, PlusIcon } from '@phosphor-icons/react';
 
 import {
   useAddAssetToCollectionMutation,
@@ -421,7 +421,7 @@ function MissingAssetsList({ assets, isRemoving, onRemove }: MissingAssetsListPr
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-dashed bg-muted/20 p-3">
       <div className="flex items-center gap-2 text-sm font-medium">
-        <ImageOffIcon aria-hidden="true" />
+        <ImageBrokenIcon aria-hidden="true" />
         Missing or unloaded history rows
       </div>
       <p className="text-sm text-muted-foreground">

@@ -9,10 +9,10 @@ import {
 import {
   FolderPlusIcon,
   GitBranchIcon,
-  ImagePlusIcon,
-  SparklesIcon,
+  ImagesSquareIcon,
+  SparkleIcon,
   StarIcon,
-} from 'lucide-react';
+} from '@phosphor-icons/react';
 
 import {
   useAddAssetToCollectionMutation,
@@ -355,7 +355,7 @@ export function AssetDetailDialog({
                       disabled={actionDisabled}
                       onClick={handleMakeVariants}
                     >
-                      <ImagePlusIcon data-icon="inline-start" />
+                      <ImagesSquareIcon data-icon="inline-start" />
                       {variantsMutation.isPending ? 'Making variants…' : 'Make variants'}
                     </InputGroupButton>
                     <InputGroupButton
@@ -364,7 +364,7 @@ export function AssetDetailDialog({
                       disabled={actionDisabled}
                       onClick={handleRemix}
                     >
-                      <SparklesIcon data-icon="inline-start" />
+                      <SparkleIcon data-icon="inline-start" />
                       {remixMutation.isPending ? 'Remixing…' : 'Remix'}
                     </InputGroupButton>
                   </div>

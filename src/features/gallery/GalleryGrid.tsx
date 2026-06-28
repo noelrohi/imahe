@@ -6,7 +6,7 @@ import {
   useMutation,
   useQueryClient,
 } from '@tanstack/react-query';
-import { StarIcon } from 'lucide-react';
+import { StarIcon } from '@phosphor-icons/react';
 
 import { ima2Client } from '@/lib/ima2/client';
 import type {
