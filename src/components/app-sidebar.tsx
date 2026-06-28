@@ -1,5 +1,5 @@
+import { Link, useRouterState } from '@tanstack/react-router';
 import { FolderIcon, HomeIcon, SettingsIcon } from 'lucide-react';
-import { NavLink, useMatch } from 'react-router-dom';
 
 import {
   Sidebar,
@@ -22,16 +22,17 @@ const navigationItems = [
 type NavigationItem = (typeof navigationItems)[number];
 
 function AppSidebarNavItem({ item }: { item: NavigationItem }) {
-  const match = useMatch({ path: item.to, end: true });
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
   const Icon = item.icon;
+  const isActive = pathname === item.to;
 
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton asChild isActive={Boolean(match)}>
-        <NavLink to={item.to} end>
+      <SidebarMenuButton asChild isActive={isActive}>
+        <Link to={item.to} activeOptions={{ exact: true }}>
           <Icon aria-hidden="true" />
           <span>{item.title}</span>
-        </NavLink>
+        </Link>
       </SidebarMenuButton>
     </SidebarMenuItem>
   );

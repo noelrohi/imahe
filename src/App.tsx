@@ -1,51 +1,31 @@
+import { QueryClientProvider } from '@tanstack/react-query';
 import {
-  Outlet,
   RouterProvider,
-  createHashRouter,
-  type RouteObject,
-} from 'react-router-dom';
+  createHashHistory,
+  createRouter,
+} from '@tanstack/react-router';
 
-import { AppSidebar } from '@/components/app-sidebar';
-import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
-import { TooltipProvider } from '@/components/ui/tooltip';
-import Collections from '@/routes/Collections';
-import Home from '@/routes/Home';
-import Settings from '@/routes/Settings';
+import { queryClient } from '@/lib/query';
 
-export function AppShell() {
-  return (
-    <TooltipProvider>
-      <SidebarProvider>
-        <AppSidebar />
-        <SidebarInset>
-          <header className="flex h-14 shrink-0 items-center border-b px-4">
-            <SidebarTrigger className="-ml-1" />
-          </header>
-          <div className="flex flex-1 flex-col">
-            <Outlet />
-          </div>
-        </SidebarInset>
-      </SidebarProvider>
-    </TooltipProvider>
-  );
+import { routeTree } from './routeTree.gen';
+
+export const router = createRouter({
+  routeTree,
+  history: createHashHistory(),
+});
+
+declare module '@tanstack/react-router' {
+  interface Register {
+    router: typeof router;
+  }
 }
 
-export const routes: RouteObject[] = [
-  {
-    path: '/',
-    element: <AppShell />,
-    children: [
-      { index: true, element: <Home /> },
-      { path: 'settings', element: <Settings /> },
-      { path: 'collections', element: <Collections /> },
-    ],
-  },
-];
-
-const router = createHashRouter(routes);
-
 export function App() {
-  return <RouterProvider router={router} />;
+  return (
+    <QueryClientProvider client={queryClient}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>
+  );
 }
 
 export default App;

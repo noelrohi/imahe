@@ -1,5 +1,6 @@
 export const IPC_CHANNELS = {
   sidecarGetBaseUrl: 'sidecar:get-base-url',
+  shellOpenExternal: 'shell:open-external',
   storeAssetsUpsert: 'store:assets:upsert',
   storeAssetsSetFavorite: 'store:assets:set-favorite',
   storeAssetsGet: 'store:assets:get',
@@ -50,5 +51,6 @@ export type ImaheStoreApi = {
 
 export type ImaheApi = {
   getSidecarBaseUrl: () => Promise<SidecarBaseUrl>;
+  openExternal: (url: string) => Promise<void>;
   store: ImaheStoreApi;
 };
