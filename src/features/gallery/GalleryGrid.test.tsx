@@ -49,7 +49,22 @@ beforeEach(() => {
     configurable: true,
     value: {
       getSidecarBaseUrl: vi.fn(async () => 'http://127.0.0.1:4890'),
-      store: {},
+      openExternal: vi.fn(),
+      store: {
+        assets: {
+          upsert: vi.fn(),
+          setFavorite: vi.fn(),
+          get: vi.fn(async () => null),
+          getChildren: vi.fn(async () => []),
+        },
+        collections: {
+          create: vi.fn(),
+          list: vi.fn(),
+          addAsset: vi.fn(),
+          removeAsset: vi.fn(),
+          listAssets: vi.fn(),
+        },
+      },
     },
   });
 });
