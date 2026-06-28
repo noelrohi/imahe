@@ -3,7 +3,16 @@ import path from 'node:path';
 import started from 'electron-squirrel-startup';
 
 import { getBaseUrl, startSidecar, stopSidecar } from './main/sidecar';
-import { IPC_CHANNELS } from './shared/ipc';
+import { getAsset, getChildren, setFavorite, upsertAsset } from './main/store/assets';
+import {
+  addToCollection,
+  createCollection,
+  listAssetsInCollection,
+  listCollections,
+  removeFromCollection,
+} from './main/store/collections';
+import { getDb } from './main/store/db';
+import { IPC_CHANNELS, type UpsertAssetPayload } from './shared/ipc';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -11,6 +20,31 @@ if (started) {
 }
 
 ipcMain.handle(IPC_CHANNELS.sidecarGetBaseUrl, () => getBaseUrl());
+ipcMain.handle(IPC_CHANNELS.storeAssetsUpsert, (_event, asset: UpsertAssetPayload) =>
+  upsertAsset(asset),
+);
+ipcMain.handle(IPC_CHANNELS.storeAssetsSetFavorite, (_event, id: string, favorite: boolean) =>
+  setFavorite(id, favorite),
+);
+ipcMain.handle(IPC_CHANNELS.storeAssetsGet, (_event, id: string) => getAsset(id));
+ipcMain.handle(IPC_CHANNELS.storeAssetsGetChildren, (_event, parentId: string) =>
+  getChildren(parentId),
+);
+ipcMain.handle(IPC_CHANNELS.storeCollectionsCreate, (_event, name: string) =>
+  createCollection(name),
+);
+ipcMain.handle(IPC_CHANNELS.storeCollectionsList, () => listCollections());
+ipcMain.handle(
+  IPC_CHANNELS.storeCollectionsAddAsset,
+  (_event, collectionId: string, assetId: string) => addToCollection(collectionId, assetId),
+);
+ipcMain.handle(
+  IPC_CHANNELS.storeCollectionsRemoveAsset,
+  (_event, collectionId: string, assetId: string) => removeFromCollection(collectionId, assetId),
+);
+ipcMain.handle(IPC_CHANNELS.storeCollectionsListAssets, (_event, collectionId: string) =>
+  listAssetsInCollection(collectionId),
+);
 
 const createWindow = () => {
   // Create the browser window.
@@ -36,6 +70,12 @@ const createWindow = () => {
 };
 
 const startApp = async () => {
+  try {
+    getDb();
+  } catch (error) {
+    console.error('Failed to initialize imahe store.', error);
+  }
+
   try {
     await startSidecar();
   } catch (error) {

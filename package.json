@@ -13,7 +13,8 @@
     "lint": "eslint --ext .ts,.tsx .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "rebuild:native": "electron-rebuild -f -w better-sqlite3"
   },
   "keywords": [],
   "author": {
@@ -31,9 +32,11 @@
     "@electron-forge/plugin-fuses": "^7.11.2",
     "@electron-forge/plugin-vite": "^7.11.2",
     "@electron/fuses": "^1.8.0",
+    "@electron/rebuild": "^4.0.6",
     "@tailwindcss/vite": "^4.3.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/electron-squirrel-startup": "^1.0.2",
     "@types/node": "^26.0.1",
     "@types/react": "^19.2.17",
@@ -53,6 +56,7 @@
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.2.9",
+    "better-sqlite3": "^12.11.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "electron-squirrel-startup": "^1.0.1",
